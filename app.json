@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Maitri LSP",
+    "slug": "maitri-lsp-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "org.maitritrust.lsp",
+      "permissions": ["ACCESS_FINE_LOCATION", "CAMERA"]
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.maitritrust.lsp"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "Allow Maitri LSP to check you are at the school for attendance." }
+      ],
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow Maitri LSP to use the camera for facial attendance check." }
+      ]
+    ]
+  }
+}
