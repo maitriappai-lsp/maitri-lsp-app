@@ -158,26 +158,23 @@ export default function AdminDashboardScreen() {
         options={[{ value: 'all', label: 'All resources' }, ...facilitators.map((f) => ({ value: f.id, label: f.name }))]}
       />
 
-      <Card>
-        <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.sm }}>
-          Summary -- {from} to {to}
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-          <View style={{ minWidth: 130 }}>
-            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{summary.daysPresent}</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>Days present</Text>
+      <Card style={{ paddingVertical: spacing.sm }}>
+        <View style={{ flexDirection: 'row' }}>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{summary.daysPresent}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 10 }}>Days</Text>
           </View>
-          <View style={{ minWidth: 130 }}>
-            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{summary.attendanceRecords}</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>Attendance records</Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{summary.attendanceRecords}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 10 }}>Attend</Text>
           </View>
-          <View style={{ minWidth: 130 }}>
-            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{summary.sessionRecords}</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>Session records</Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{summary.sessionRecords}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 10 }}>Sessions</Text>
           </View>
-          <View style={{ minWidth: 130 }}>
-            <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{summary.fileUploads}</Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12 }}>File uploads</Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{summary.fileUploads}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 10 }}>Files</Text>
           </View>
         </View>
       </Card>

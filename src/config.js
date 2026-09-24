@@ -7,4 +7,4 @@
 //     (phone and computer must be on the same Wi-Fi)
 //   - A deployed backend:           its https:// URL
 // ---------------------------------------------------------------------------
-export const API_BASE_URL = 'http://localhost:4000';
+export const API_BASE_URL = 'https://maitri-lsp-backend-fiho.onrender.com';
