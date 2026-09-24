@@ -7,7 +7,7 @@ import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
-import { Screen, Card, Chip, Field, Select, PrimaryButton, SecondaryButton, SectionLabel } from '../../components/UI';
+import { Screen, Card, Chip, Field, Select, PrimaryButton, SecondaryButton, SectionLabel, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
 const TABS = ['Resources', 'Geo', 'Beneficiaries', 'Life Skills'];
@@ -224,20 +224,10 @@ function ResourcesTab() {
         />
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <Field
-              label="Contract start"
-              value={contractStart}
-              onChangeText={setContractStart}
-              placeholder="YYYY-MM-DD (default: today)"
-            />
+            <DateField label="Contract start" value={contractStart} onChange={setContractStart} placeholder="Default: today" />
           </View>
           <View style={{ flex: 1 }}>
-            <Field
-              label="Contract end (optional)"
-              value={contractEnd}
-              onChangeText={setContractEnd}
-              placeholder="YYYY-MM-DD"
-            />
+            <DateField label="Contract end (optional)" value={contractEnd} onChange={setContractEnd} />
           </View>
         </View>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
@@ -268,20 +258,10 @@ function ResourcesTab() {
             />
             <View style={{ flexDirection: 'row', gap: spacing.md }}>
               <View style={{ flex: 1 }}>
-                <Field
-                  label="Contract start"
-                  value={editContractStart}
-                  onChangeText={setEditContractStart}
-                  placeholder="YYYY-MM-DD"
-                />
+                <DateField label="Contract start" value={editContractStart} onChange={setEditContractStart} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field
-                  label="Contract end (optional)"
-                  value={editContractEnd}
-                  onChangeText={setEditContractEnd}
-                  placeholder="YYYY-MM-DD"
-                />
+                <DateField label="Contract end (optional)" value={editContractEnd} onChange={setEditContractEnd} />
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>

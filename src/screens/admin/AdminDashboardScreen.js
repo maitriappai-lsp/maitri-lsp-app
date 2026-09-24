@@ -8,7 +8,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
-import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select } from '../../components/UI';
+import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
@@ -144,10 +144,10 @@ export default function AdminDashboardScreen() {
 
       <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm }}>
         <View style={{ flex: 1 }}>
-          <Field label="From" value={from} onChangeText={setFrom} placeholder="YYYY-MM-DD" />
+          <DateField label="From" value={from} onChange={setFrom} />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="To" value={to} onChangeText={setTo} placeholder="YYYY-MM-DD" />
+          <DateField label="To" value={to} onChange={setTo} />
         </View>
       </View>
 

@@ -1,7 +1,8 @@
 // Small shared presentational components used across screens, kept in one
 // file since they're simple wrappers rather than a full design system.
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Platform } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, spacing, ragColor } from '../theme';
 
 export function Screen({ children, style }) {
@@ -77,22 +78,109 @@ export function RagChip({ rag }) {
   );
 }
 
-export function Select({ label, value, options, onSelect }) {
-  // A lightweight "select" implemented as a horizontally scrollable chip row.
-  // Swap for a real picker/modal component if you want a native dropdown feel.
+export function Select({ label, value, options, onSelect, placeholder = 'Select...' }) {
+  // A tap-to-open modal dropdown with a search box -- suited to long lists
+  // (20-30+ options), unlike a chip row which wraps into a wall of buttons.
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const selected = options.find((o) => o.value === value);
+  const filtered = useMemo(() => {
+    if (!query.trim()) return options;
+    const q = query.trim().toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
   return (
     <View style={{ marginBottom: spacing.md }}>
       {label ? <FieldLabel>{label}</FieldLabel> : null}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
-        {options.map((opt) => (
-          <Chip
-            key={opt.value}
-            label={opt.label}
-            active={opt.value === value}
-            onPress={() => onSelect(opt.value)}
-          />
+      <TouchableOpacity
+        style={styles.selectBox}
+        onPress={() => {
+          setQuery('');
+          setOpen(true);
+        }}
+      >
+        <Text style={[styles.selectBoxText, !selected && { color: colors.textMuted }]} numberOfLines={1}>
+          {selected ? selected.label : placeholder}
+        </Text>
+        <Text style={styles.selectChevron}>{'\u25BE'}</Text>
+      </TouchableOpacity>
+
+      <Modal visible={open} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setOpen(false)}>
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            {options.length > 6 ? (
+              <TextInput
+                style={[styles.input, { marginBottom: spacing.sm }]}
+                placeholder="Search..."
+                placeholderTextColor={colors.textMuted}
+                value={query}
+                onChangeText={setQuery}
+                autoFocus
+              />
+            ) : null}
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => String(item.value)}
+              style={{ maxHeight: 360 }}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={<Text style={{ color: colors.textMuted, padding: spacing.md }}>No matches.</Text>}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.optionRow, item.value === value && styles.optionRowActive]}
+                  onPress={() => {
+                    onSelect(item.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[styles.optionText, item.value === value && { color: colors.primary, fontWeight: '700' }]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
+export function DateField({ label, value, onChange, placeholder = 'YYYY-MM-DD' }) {
+  // Native date picker wrapped to still read/write plain 'YYYY-MM-DD' strings,
+  // so existing state/validation elsewhere doesn't need to change.
+  const [show, setShow] = useState(false);
+  const dateValue = value ? new Date(value + 'T00:00:00') : new Date();
+
+  function handleChange(event, selectedDate) {
+    if (Platform.OS === 'android') setShow(false);
+    if (event.type === 'dismissed' || !selectedDate) return;
+    onChange(selectedDate.toISOString().slice(0, 10));
+  }
+
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      {label ? <FieldLabel>{label}</FieldLabel> : null}
+      <TouchableOpacity style={styles.selectBox} onPress={() => setShow(true)}>
+        <Text style={[styles.selectBoxText, !value && { color: colors.textMuted }]}>{value || placeholder}</Text>
+        <Text style={styles.selectChevron}>{'\uD83D\uDCC5'}</Text>
+      </TouchableOpacity>
+      {show &&
+        (Platform.OS === 'ios' ? (
+          <Modal visible={show} transparent animationType="fade" onRequestClose={() => setShow(false)}>
+            <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShow(false)}>
+              <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+                <DateTimePicker value={dateValue} mode="date" display="spinner" onChange={handleChange} />
+                <PrimaryButton title="Done" onPress={() => setShow(false)} />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        ) : (
+          <DateTimePicker value={dateValue} mode="date" display="default" onChange={handleChange} />
         ))}
-      </View>
     </View>
   );
 }
@@ -153,6 +241,39 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   chipText: { fontSize: 13, color: colors.text, fontWeight: '600' },
+  selectBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  selectBoxText: { color: colors.text, fontSize: 15, flex: 1, marginRight: spacing.sm },
+  selectChevron: { color: colors.textMuted, fontSize: 12 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalSheet: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: spacing.md,
+    maxHeight: '70%',
+  },
+  optionRow: {
+    paddingVertical: 12,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  optionRowActive: { backgroundColor: colors.chipBg },
+  optionText: { color: colors.text, fontSize: 15 },
   ragChip: {
     flexDirection: 'row',
     alignItems: 'center',

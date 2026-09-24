@@ -7,7 +7,7 @@ import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
-import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
+import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -144,10 +144,10 @@ export default function ScheduleScreen() {
             <Select value={dayOfWeek} onSelect={setDayOfWeek} options={DAYS.map((d) => ({ value: d, label: d }))} />
             <View style={{ flexDirection: 'row', gap: spacing.md }}>
               <View style={{ flex: 1 }}>
-                <Field label="Start date" value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" />
+                <DateField label="Start date" value={startDate} onChange={setStartDate} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="End date" value={endDate} onChangeText={setEndDate} placeholder="YYYY-MM-DD" />
+                <DateField label="End date" value={endDate} onChange={setEndDate} />
               </View>
             </View>
             <Field label="Time" value={time} onChangeText={setTime} placeholder="10:00" />
