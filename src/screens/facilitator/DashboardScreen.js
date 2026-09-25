@@ -5,9 +5,12 @@
 // exists; client-side you could also use a library like react-native-xlsx).
 import React, { useMemo, useState } from 'react';
 import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
-import { Screen, Card, Field, Chip, RagChip, SecondaryButton } from '../../components/UI';
+import { apiGet } from '../../data/api';
+import { Screen, Card, Field, Chip, RagChip, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
@@ -51,11 +54,31 @@ export default function DashboardScreen() {
     (u) => u.facilitatorId === currentUser?.id && u.date >= from && u.date <= to
   );
 
-  function exportToExcel() {
-    Alert.alert(
-      'Export to Excel',
-      `Would export ${mySessions.length} session record(s) for ${from} to ${to} as an .xlsx file.`
-    );
+  const [exporting, setExporting] = useState(false);
+
+  async function exportToExcel() {
+    const exportType = tab === 'Attendance' ? 'attendance' : tab === 'Uploads' ? 'uploads' : 'sessions';
+    setExporting(true);
+    try {
+      const { filename, base64 } = await apiGet(
+        `/api/export/${exportType}?from=${from}&to=${to}&facilitatorId=${currentUser.id}`
+      );
+      const fileUri = FileSystem.documentDirectory + filename;
+      await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          dialogTitle: filename,
+        });
+      } else {
+        Alert.alert('Export ready', `Saved to ${fileUri}`);
+      }
+    } catch (e) {
+      Alert.alert('Export failed', e.message || 'Please try again.');
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -66,10 +89,10 @@ export default function DashboardScreen() {
 
       <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm }}>
         <View style={{ flex: 1 }}>
-          <Field label="From" value={from} onChangeText={setFrom} placeholder="YYYY-MM-DD" />
+          <DateField label="From" value={from} onChange={setFrom} />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="To" value={to} onChangeText={setTo} placeholder="YYYY-MM-DD" />
+          <DateField label="To" value={to} onChange={setTo} />
         </View>
       </View>
       <Field
@@ -99,7 +122,12 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      <SecondaryButton title="Export to Excel" onPress={exportToExcel} style={{ marginBottom: spacing.md }} />
+      <SecondaryButton
+        title={exporting ? 'Exporting...' : 'Export to Excel'}
+        onPress={exportToExcel}
+        disabled={exporting}
+        style={{ marginBottom: spacing.md }}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {(tab === 'Overview' || tab === 'Sessions') &&

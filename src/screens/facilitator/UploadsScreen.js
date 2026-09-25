@@ -81,7 +81,7 @@ export default function UploadsScreen() {
             onSelect={setBeneficiaryId}
             options={db.beneficiaries.map((b) => ({ value: b.id, label: `${b.school} - ${b.class}` }))}
           />
-          <SectionLabel>Link to service category</SectionLabel>
+          <SectionLabel>Link to Life Skills Category</SectionLabel>
           <Select
             value={categoryId}
             onSelect={setCategoryId}

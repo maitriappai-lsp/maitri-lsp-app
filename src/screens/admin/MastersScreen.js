@@ -2,9 +2,10 @@
 // Full Add/Edit/Delete on each, plus an "Import from Excel" stub (real
 // version parses an .xlsx with exceljs/SheetJS server-side and upserts by
 // code, per Section 6 -- picking a file here just simulates that).
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Location from 'expo-location';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
 import { Screen, Card, Chip, Field, Select, PrimaryButton, SecondaryButton, SectionLabel, DateField } from '../../components/UI';
@@ -486,7 +487,7 @@ function BeneficiariesTab() {
   );
 }
 
-const PILLARS = ['Values', 'Health and Hygiene', 'Soft Skills', 'Environment', 'Creativity'];
+const PILLARS = ['Values', 'Health and Hygiene', 'Soft Skills', 'Environment', 'Creativity', 'Others'];
 
 function CategoriesTab() {
   const { db, addRecord, updateRecord, deleteRecord, nextId } = useData();
@@ -552,7 +553,7 @@ function CategoriesTab() {
         <Select value={pillar} onSelect={setPillar} options={PILLARS.map((p) => ({ value: p, label: p }))} />
         <Field label="Topic (Category 2)" value={topic} onChangeText={setTopic} placeholder="OTHERS" />
         <Field label="Sub-topic (Category 3, optional)" value={subtopic} onChangeText={setSubtopic} placeholder="OTHERS" />
-        <PrimaryButton title={saving ? 'Saving...' : 'Add category'} onPress={add} disabled={saving} />
+        <PrimaryButton title={saving ? 'Saving...' : 'Add Life Skill'} onPress={add} disabled={saving} />
       </Card>
       {db.categories.map((c) =>
         editingId === c.id ? (
@@ -612,6 +613,7 @@ function GeoTab() {
   const [lng, setLng] = useState('');
   const [radius, setRadius] = useState('150');
   const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [editLabel, setEditLabel] = useState('');
@@ -619,6 +621,30 @@ function GeoTab() {
   const [editLng, setEditLng] = useState('');
   const [editRadius, setEditRadius] = useState('150');
   const [savingEdit, setSavingEdit] = useState(false);
+
+  async function useCurrentLocation() {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location permission needed', 'Enable location access to pick up your current position.');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      setLat(String(pos.coords.latitude));
+      setLng(String(pos.coords.longitude));
+    } catch (e) {
+      Alert.alert('Could not get location', e.message || 'Please try again, or enter coordinates manually.');
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  // Default the Add-geofence form to the device's current location, so
+  // adding a geofence from the actual site needs no manual coordinate entry.
+  useEffect(() => {
+    useCurrentLocation();
+  }, []);
 
   async function add() {
     if (!school || !lat || !lng) return Alert.alert('Missing fields', 'School, latitude and longitude are required.');
@@ -685,6 +711,12 @@ function GeoTab() {
         </Text>
         <Field label="School" value={school} onChangeText={setSchool} placeholder="School name" />
         <Field label="Label (optional)" value={label} onChangeText={setLabel} placeholder="e.g. Block A" />
+        <SecondaryButton
+          title={locating ? 'Getting current location...' : 'Use current location'}
+          onPress={useCurrentLocation}
+          disabled={locating}
+          style={{ marginBottom: spacing.md }}
+        />
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <Field label="Latitude" value={lat} onChangeText={setLat} keyboardType="decimal-pad" placeholder="13.0343" />
