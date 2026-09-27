@@ -8,6 +8,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
+import { todayLocalYMD } from '../../utils/date';
 import { Screen, Card, Chip, Field, Select, PrimaryButton, SecondaryButton, SectionLabel, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
@@ -122,7 +123,7 @@ function ResourcesTab() {
         role,
         bloodGroup: '',
         emergencyContact: '',
-        contractStart: contractStart || new Date().toISOString().slice(0, 10),
+        contractStart: contractStart || todayLocalYMD(),
         contractEnd,
         facialDataCaptured: false,
         password: 'changeme123',

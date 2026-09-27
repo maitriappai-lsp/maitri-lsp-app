@@ -6,6 +6,7 @@ import LoginScreen from '../screens/LoginScreen';
 import FacilitatorTabs from './FacilitatorTabs';
 import AdminTabs from './AdminTabs';
 import { colors, spacing } from '../theme';
+import { todayLocalYMD } from '../utils/date';
 
 function TopBar() {
   const { currentUser, logout } = useAuth();
@@ -19,7 +20,7 @@ function TopBar() {
       // close it automatically rather than leaving it dangling -- a
       // facilitator forgetting to tap "Mark time out" shouldn't leave an
       // incomplete record behind.
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalYMD();
       const open = db.attendance?.find(
         (a) => a.facilitatorId === currentUser?.id && a.date === today && !a.timeOut
       );

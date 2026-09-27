@@ -12,6 +12,7 @@ import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { todayLocalYMD } from '../../utils/date';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
@@ -23,7 +24,7 @@ export default function DashboardScreen() {
   const [ragFilter, setRagFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [from, setFrom] = useState('2026-09-01');
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(todayLocalYMD());
   const [expandedId, setExpandedId] = useState(null);
 
   const mySessions = useMemo(

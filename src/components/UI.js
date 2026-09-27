@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { toLocalYMD } from '../utils/date';
 import { colors, spacing, ragColor } from '../theme';
 
 export function Screen({ children, style }) {
@@ -149,6 +150,51 @@ export function Select({ label, value, options, onSelect, placeholder = 'Select.
   );
 }
 
+export function TimeField({ label, value, onChange, placeholder = 'HH:MM' }) {
+  // Same pattern as DateField, but mode="time" and reads/writes a plain
+  // 'HH:MM' (24-hour) string so it drops straight into existing
+  // time_in/time_out text fields with no format changes elsewhere.
+  const [show, setShow] = useState(false);
+  const timeValue = useMemo(() => {
+    const d = new Date();
+    if (value && /^\d{2}:\d{2}$/.test(value)) {
+      const [h, m] = value.split(':').map(Number);
+      d.setHours(h, m, 0, 0);
+    }
+    return d;
+  }, [value]);
+
+  function handleChange(event, selectedDate) {
+    if (Platform.OS === 'android') setShow(false);
+    if (event.type === 'dismissed' || !selectedDate) return;
+    const hh = String(selectedDate.getHours()).padStart(2, '0');
+    const mm = String(selectedDate.getMinutes()).padStart(2, '0');
+    onChange(`${hh}:${mm}`);
+  }
+
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      {label ? <FieldLabel>{label}</FieldLabel> : null}
+      <TouchableOpacity style={styles.selectBox} onPress={() => setShow(true)}>
+        <Text style={[styles.selectBoxText, !value && { color: colors.textMuted }]}>{value || placeholder}</Text>
+        <Text style={styles.selectChevron}>{'\u23F0'}</Text>
+      </TouchableOpacity>
+      {show &&
+        (Platform.OS === 'ios' ? (
+          <Modal visible={show} transparent animationType="fade" onRequestClose={() => setShow(false)}>
+            <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShow(false)}>
+              <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+                <DateTimePicker value={timeValue} mode="time" display="spinner" is24Hour onChange={handleChange} />
+                <PrimaryButton title="Done" onPress={() => setShow(false)} />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        ) : (
+          <DateTimePicker value={timeValue} mode="time" display="default" is24Hour onChange={handleChange} />
+        ))}
+    </View>
+  );
+}
 export function DateField({ label, value, onChange, placeholder = 'YYYY-MM-DD' }) {
   // Native date picker wrapped to still read/write plain 'YYYY-MM-DD' strings,
   // so existing state/validation elsewhere doesn't need to change.
@@ -158,7 +204,7 @@ export function DateField({ label, value, onChange, placeholder = 'YYYY-MM-DD' }
   function handleChange(event, selectedDate) {
     if (Platform.OS === 'android') setShow(false);
     if (event.type === 'dismissed' || !selectedDate) return;
-    onChange(selectedDate.toISOString().slice(0, 10));
+    onChange(toLocalYMD(selectedDate));
   }
 
   return (

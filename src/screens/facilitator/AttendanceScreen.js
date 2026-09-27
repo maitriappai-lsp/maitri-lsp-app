@@ -35,11 +35,12 @@ import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { todayLocalYMD } from '../../utils/date';
 
 export default function AttendanceScreen() {
   const { currentUser } = useAuth();
   const { db, getBeneficiary, addRecord, updateRecord, nextId } = useData();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalYMD();
 
   const todaysSchedule = useMemo(
     () => db.schedule.filter((s) => s.facilitatorId === currentUser?.id && s.date === today),

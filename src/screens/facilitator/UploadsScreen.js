@@ -10,6 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
+import { todayLocalYMD } from '../../utils/date';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
@@ -54,7 +55,7 @@ export default function UploadsScreen() {
         beneficiaryId,
         categoryId,
         facilitatorId: currentUser.id,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayLocalYMD(),
         description,
         storagePath,
         fileUrl: url,

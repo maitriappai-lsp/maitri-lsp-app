@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, RagChip } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { todayLocalYMD } from '../../utils/date';
 
 const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
@@ -114,7 +115,7 @@ function CompleteCheckIn({ attendanceRecord }) {
 export default function SessionsScreen() {
   const { currentUser } = useAuth();
   const { db, addRecord, nextId } = useData();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalYMD();
 
   const pendingCheckIns = db.attendance.filter(
     (a) =>
