@@ -30,9 +30,16 @@ function CompleteCheckIn({ attendanceRecord }) {
   const [rag, setRag] = useState('Green');
   const [facilitatorFeedback, setFacilitatorFeedback] = useState('');
   const [schoolFeedback, setSchoolFeedback] = useState('');
+  const [externalOrgName, setExternalOrgName] = useState('');
+  const [externalResources, setExternalResources] = useState('');
+  const [photosUploaded, setPhotosUploaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function save() {
+    if (!categoryId) {
+      Alert.alert('Life skill service category required', 'Select a category.');
+      return;
+    }
     setSaving(true);
     try {
       await addRecord('psr', {
@@ -49,7 +56,9 @@ function CompleteCheckIn({ attendanceRecord }) {
         rag,
         facilitatorFeedback,
         schoolFeedback,
-        photosUploaded: false,
+        externalOrgName: externalOrgName || null,
+        externalResources: externalResources || null,
+        photosUploaded,
       });
       // No local "done" state needed -- once a psr with this attendanceId
       // exists, this attendance record naturally drops out of
@@ -107,6 +116,28 @@ function CompleteCheckIn({ attendanceRecord }) {
         placeholder="Any feedback from the school"
         multiline
       />
+      <Field
+        label="External org name (optional)"
+        value={externalOrgName}
+        onChangeText={setExternalOrgName}
+        placeholder="e.g. a partner NGO involved in this session"
+      />
+      <Field
+        label="External resources (optional)"
+        value={externalResources}
+        onChangeText={setExternalResources}
+        placeholder="e.g. materials or resources an external org provided"
+        multiline
+      />
+      <SectionLabel>Photos taken and shared</SectionLabel>
+      <Select
+        value={photosUploaded ? 'yes' : 'no'}
+        onSelect={(v) => setPhotosUploaded(v === 'yes')}
+        options={[
+          { value: 'no', label: 'No' },
+          { value: 'yes', label: 'Yes' },
+        ]}
+      />
       <PrimaryButton title={saving ? 'Saving...' : 'Save session details'} onPress={save} disabled={saving} />
     </Card>
   );
@@ -137,6 +168,9 @@ export default function SessionsScreen() {
   const [rag, setRag] = useState('Green');
   const [facilitatorFeedback, setFacilitatorFeedback] = useState('');
   const [schoolFeedback, setSchoolFeedback] = useState('');
+  const [externalOrgName, setExternalOrgName] = useState('');
+  const [externalResources, setExternalResources] = useState('');
+  const [photosUploaded, setPhotosUploaded] = useState(false);
 
   const mySessions = db.psr
     .filter((p) => p.facilitatorId === currentUser?.id)
@@ -146,6 +180,26 @@ export default function SessionsScreen() {
   async function submit() {
     if (!hasAttendanceToday) {
       Alert.alert('No attendance today', 'Mark attendance on the Attendance screen before logging a session.');
+      return;
+    }
+    if (!beneficiaryId) {
+      Alert.alert('Beneficiary required', 'Select a beneficiary.');
+      return;
+    }
+    if (!categoryId) {
+      Alert.alert('Life skill service category required', 'Select a category.');
+      return;
+    }
+    if (!timeIn.trim()) {
+      Alert.alert('Time in required', 'Enter a time in.');
+      return;
+    }
+    if (!timeOut.trim()) {
+      Alert.alert('Time out required', 'Enter a time out.');
+      return;
+    }
+    if (!rag) {
+      Alert.alert('RAG status required', 'Select a RAG status.');
       return;
     }
     const record = {
@@ -161,7 +215,9 @@ export default function SessionsScreen() {
       rag,
       facilitatorFeedback,
       schoolFeedback,
-      photosUploaded: false,
+      externalOrgName: externalOrgName || null,
+      externalResources: externalResources || null,
+      photosUploaded,
     };
     try {
       await addRecord('psr', record);
@@ -171,6 +227,9 @@ export default function SessionsScreen() {
       setTimeOut('');
       setFacilitatorFeedback('');
       setSchoolFeedback('');
+      setExternalOrgName('');
+      setExternalResources('');
+      setPhotosUploaded(false);
     } catch (e) {
       Alert.alert('Could not save', e.message || 'Please try again.');
     }
@@ -202,7 +261,7 @@ export default function SessionsScreen() {
           </Card>
         ) : (
         <Card>
-          <SectionLabel>Beneficiary</SectionLabel>
+          <SectionLabel>Beneficiary (required)</SectionLabel>
           <Select
             value={beneficiaryId}
             onSelect={setBeneficiaryId}
@@ -212,7 +271,7 @@ export default function SessionsScreen() {
             }))}
           />
 
-          <SectionLabel>Life skill service category</SectionLabel>
+          <SectionLabel>Life skill service category (required)</SectionLabel>
           <Select
             value={categoryId}
             onSelect={setCategoryId}
@@ -224,10 +283,10 @@ export default function SessionsScreen() {
 
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
             <View style={{ flex: 1 }}>
-              <Field label="Time in" value={timeIn} onChangeText={setTimeIn} placeholder="10:02 AM" />
+              <Field label="Time in (required)" value={timeIn} onChangeText={setTimeIn} placeholder="10:02 AM" />
             </View>
             <View style={{ flex: 1 }}>
-              <Field label="Time out" value={timeOut} onChangeText={setTimeOut} placeholder="10:58 AM" />
+              <Field label="Time out (required)" value={timeOut} onChangeText={setTimeOut} placeholder="10:58 AM" />
             </View>
           </View>
 
@@ -242,7 +301,7 @@ export default function SessionsScreen() {
           <SectionLabel>Rating (session quality)</SectionLabel>
           <Select value={rating} onSelect={setRating} options={RATINGS.map((r) => ({ value: r, label: r }))} />
 
-          <SectionLabel>RAG status</SectionLabel>
+          <SectionLabel>RAG status (required)</SectionLabel>
           <Select value={rag} onSelect={setRag} options={RAGS.map((r) => ({ value: r, label: r }))} />
 
           <Field
@@ -258,6 +317,28 @@ export default function SessionsScreen() {
             onChangeText={setSchoolFeedback}
             placeholder="Any feedback from the school"
             multiline
+          />
+          <Field
+            label="External org name (optional)"
+            value={externalOrgName}
+            onChangeText={setExternalOrgName}
+            placeholder="e.g. a partner NGO involved in this session"
+          />
+          <Field
+            label="External resources (optional)"
+            value={externalResources}
+            onChangeText={setExternalResources}
+            placeholder="e.g. materials or resources an external org provided"
+            multiline
+          />
+          <SectionLabel>Photos taken and shared</SectionLabel>
+          <Select
+            value={photosUploaded ? 'yes' : 'no'}
+            onSelect={(v) => setPhotosUploaded(v === 'yes')}
+            options={[
+              { value: 'no', label: 'No' },
+              { value: 'yes', label: 'Yes' },
+            ]}
           />
 
           <PrimaryButton title="Submit session record" onPress={submit} />
