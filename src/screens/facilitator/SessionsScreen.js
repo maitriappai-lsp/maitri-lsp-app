@@ -26,6 +26,8 @@ function CompleteCheckIn({ attendanceRecord }) {
   const beneficiary = db.beneficiaries.find((b) => b.id === attendanceRecord.beneficiaryId);
   const [categoryId, setCategoryId] = useState(db.categories[0]?.id);
   const [studentsPresent, setStudentsPresent] = useState('');
+  const [timeIn, setTimeIn] = useState(attendanceRecord.timeIn || '');
+  const [timeOut, setTimeOut] = useState(attendanceRecord.timeOut || '');
   const [rating, setRating] = useState('Good');
   const [rag, setRag] = useState('Green');
   const [facilitatorFeedback, setFacilitatorFeedback] = useState('');
@@ -40,6 +42,14 @@ function CompleteCheckIn({ attendanceRecord }) {
       Alert.alert('Life skill service category required', 'Select a category.');
       return;
     }
+    if (!timeIn.trim()) {
+      Alert.alert('Time in required', 'Enter a time in.');
+      return;
+    }
+    if (!timeOut.trim()) {
+      Alert.alert('Time out required', 'Enter a time out.');
+      return;
+    }
     setSaving(true);
     try {
       await addRecord('psr', {
@@ -47,8 +57,8 @@ function CompleteCheckIn({ attendanceRecord }) {
         beneficiaryId: attendanceRecord.beneficiaryId,
         facilitatorId: attendanceRecord.facilitatorId,
         date: attendanceRecord.date,
-        timeIn: attendanceRecord.timeIn,
-        timeOut: attendanceRecord.timeOut,
+        timeIn,
+        timeOut,
         attendanceId: attendanceRecord.id,
         categoryId,
         studentsPresent: Number(studentsPresent) || 0,
@@ -82,6 +92,14 @@ function CompleteCheckIn({ attendanceRecord }) {
           Ad-hoc visit -- not on the day's schedule.
         </Text>
       )}
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <View style={{ flex: 1 }}>
+          <Field label="Time in (required)" value={timeIn} onChangeText={setTimeIn} placeholder="10:02 AM" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Field label="Time out (required)" value={timeOut} onChangeText={setTimeOut} placeholder="10:58 AM" />
+        </View>
+      </View>
       <SectionLabel>Life skill service category</SectionLabel>
       <Select
         value={categoryId}
