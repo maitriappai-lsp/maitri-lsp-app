@@ -79,6 +79,10 @@ export default function OverrideScreen() {
       Alert.alert('Reason required', 'Every attendance correction must be logged with a reason for audit.');
       return;
     }
+    if (timeIn && timeOut && timeOut <= timeIn) {
+      Alert.alert('Check the times', 'Time out must be later than time in.');
+      return;
+    }
 
     setSavingTime(true);
     try {
@@ -136,12 +140,17 @@ export default function OverrideScreen() {
 
   return (
     <Screen>
-      <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.xs }}>
-        Attendance Override
-      </Text>
-      <Text style={{ color: colors.textMuted, marginBottom: spacing.md }}>
-        Only active resources can be selected below. Every override is logged with a reason.
-      </Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: spacing.xl }}
+      >
+        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.xs }}>
+          Attendance Override
+        </Text>
+        <Text style={{ color: colors.textMuted, marginBottom: spacing.md }}>
+          Only active resources can be selected below. Every override is logged with a reason.
+        </Text>
 
       <SectionLabel>Correct attendance time</SectionLabel>
       <Card>
@@ -161,7 +170,7 @@ export default function OverrideScreen() {
             <DateField label="Date" value={startDate} onChange={setStartDate} />
           </View>
           <View style={{ flex: 1 }}>
-            <DateField label="End date (optional, for a range)" value={endDate} onChange={setEndDate} />
+            <DateField label="End date (optional)" value={endDate} onChange={setEndDate} />
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -226,7 +235,7 @@ export default function OverrideScreen() {
       </Card>
 
       <SectionLabel>Override log</SectionLabel>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <View>
         {db.overrides.length === 0 && <Text style={{ color: colors.textMuted }}>No overrides logged.</Text>}
         {db.overrides.map((o) => {
           const r = db.resources.find((x) => x.id === o.resourceId);
@@ -241,6 +250,7 @@ export default function OverrideScreen() {
             </Card>
           );
         })}
+      </View>
       </ScrollView>
     </Screen>
   );

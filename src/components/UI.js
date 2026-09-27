@@ -1,13 +1,36 @@
 // Small shared presentational components used across screens, kept in one
 // file since they're simple wrappers rather than a full design system.
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  FlatList,
+  Platform,
+  KeyboardAvoidingView,
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { toLocalYMD } from '../utils/date';
 import { colors, spacing, ragColor } from '../theme';
 
 export function Screen({ children, style }) {
-  return <View style={[styles.screen, style]}>{children}</View>;
+  // Without this, a focused text field near the bottom of a form (e.g. a
+  // multiline "Reason" field) gets covered by the keyboard with no way to
+  // see what's being typed. 'padding' on iOS pushes content up by the
+  // keyboard's height; Android handles this natively via the manifest's
+  // windowSoftInputMode, so no behavior is needed there.
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <View style={[styles.screen, style]}>{children}</View>
+    </KeyboardAvoidingView>
+  );
 }
 
 export function Card({ children, style }) {

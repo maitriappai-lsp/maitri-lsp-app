@@ -15,6 +15,13 @@
 // the first attempt fails and they want to retry after moving. Time In
 // stays disabled until the check passes and the face check passes.
 //
+// NOTE: fully automatic time-in/time-out based on continuously moving
+// into/out of the geofence (not just a one-time check) is a planned
+// follow-up -- deferred for now, since a version that also works with the
+// phone locked/app backgrounded needs a custom EAS build with background
+// location permissions (not available in Expo Go, which this app currently
+// runs through). Both time in and time out are manual button taps here.
+//
 // Only one open (not-timed-out) attendance session is allowed per
 // facilitator per day: if they already have one, this screen loads it back
 // up on open rather than letting a second time-in start.
