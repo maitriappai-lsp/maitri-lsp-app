@@ -65,6 +65,7 @@ export default function OverrideScreen() {
 
   // ---- Correct attendance time (new) -------------------------------------
   const [timeResourceId, setTimeResourceId] = useState(activeFacilitators[0]?.id);
+  const [timeBeneficiaryId, setTimeBeneficiaryId] = useState('');
   const [startDate, setStartDate] = useState(todayLocalYMD());
   const [endDate, setEndDate] = useState('');
   const [timeIn, setTimeIn] = useState('');
@@ -74,9 +75,21 @@ export default function OverrideScreen() {
 
   async function submitTimeCorrection() {
     if (!timeResourceId) return Alert.alert('Resource required', 'Select a facilitator.');
+    if (!timeBeneficiaryId) {
+      return Alert.alert('Beneficiary required', 'Select the beneficiary this attendance is for.');
+    }
     if (!timeIn && !timeOut) return Alert.alert('Nothing to update', 'Set a time in and/or time out.');
     if (!timeReason.trim()) {
       Alert.alert('Reason required', 'Every attendance correction must be logged with a reason for audit.');
+      return;
+    }
+    const todayStr = todayLocalYMD();
+    if (startDate > todayStr || (endDate && endDate > todayStr)) {
+      Alert.alert('Date is in the future', 'Attendance can only be corrected for today or earlier dates.');
+      return;
+    }
+    if (endDate && endDate < startDate) {
+      Alert.alert('Check the dates', 'End date must be on or after the start date.');
       return;
     }
     if (timeIn && timeOut && timeOut <= timeIn) {
@@ -93,8 +106,14 @@ export default function OverrideScreen() {
       let updated = 0;
 
       for (const date of dates) {
-        const matches = db.attendance.filter((a) => a.facilitatorId === timeResourceId && a.date === date);
+        const matches = db.attendance.filter(
+          (a) =>
+            a.facilitatorId === timeResourceId &&
+            a.date === date &&
+            (a.beneficiaryId === timeBeneficiaryId || !a.beneficiaryId)
+        );
         const patch = {
+          beneficiaryId: timeBeneficiaryId,
           ...(timeIn ? { timeIn } : {}),
           ...(timeOut ? { timeOut } : {}),
           overridden: true,
@@ -112,7 +131,6 @@ export default function OverrideScreen() {
           await addRecord('attendance', {
             id: nextId('ATT-OV', 'attendance'),
             facilitatorId: timeResourceId,
-            beneficiaryId: null,
             date,
             timeIn: timeIn || null,
             timeOut: timeOut || null,
@@ -131,6 +149,7 @@ export default function OverrideScreen() {
       setTimeIn('');
       setTimeOut('');
       setTimeReason('');
+      setTimeBeneficiaryId('');
     } catch (e) {
       Alert.alert('Could not save', e.message || 'Please try again.');
     } finally {
@@ -165,12 +184,22 @@ export default function OverrideScreen() {
           options={activeFacilitators.map((f) => ({ value: f.id, label: f.name }))}
           placeholder="Select facilitator"
         />
+        <SectionLabel>Beneficiary (required)</SectionLabel>
+        <Select
+          value={timeBeneficiaryId}
+          onSelect={setTimeBeneficiaryId}
+          options={db.beneficiaries.map((b) => ({
+            value: b.id,
+            label: `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}`,
+          }))}
+          placeholder="Select beneficiary"
+        />
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <DateField label="Date" value={startDate} onChange={setStartDate} />
+            <DateField label="Date" value={startDate} onChange={setStartDate} maximumDate={new Date()} />
           </View>
           <View style={{ flex: 1 }}>
-            <DateField label="End date (optional)" value={endDate} onChange={setEndDate} />
+            <DateField label="End date (optional)" value={endDate} onChange={setEndDate} maximumDate={new Date()} />
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.md }}>

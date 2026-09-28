@@ -218,7 +218,7 @@ export function TimeField({ label, value, onChange, placeholder = 'HH:MM' }) {
     </View>
   );
 }
-export function DateField({ label, value, onChange, placeholder = 'YYYY-MM-DD' }) {
+export function DateField({ label, value, onChange, placeholder = 'YYYY-MM-DD', maximumDate }) {
   // Native date picker wrapped to still read/write plain 'YYYY-MM-DD' strings,
   // so existing state/validation elsewhere doesn't need to change.
   const [show, setShow] = useState(false);
@@ -242,13 +242,13 @@ export function DateField({ label, value, onChange, placeholder = 'YYYY-MM-DD' }
           <Modal visible={show} transparent animationType="fade" onRequestClose={() => setShow(false)}>
             <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShow(false)}>
               <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
-                <DateTimePicker value={dateValue} mode="date" display="spinner" onChange={handleChange} />
+                <DateTimePicker value={dateValue} mode="date" display="spinner" maximumDate={maximumDate} onChange={handleChange} />
                 <PrimaryButton title="Done" onPress={() => setShow(false)} />
               </View>
             </TouchableOpacity>
           </Modal>
         ) : (
-          <DateTimePicker value={dateValue} mode="date" display="default" onChange={handleChange} />
+          <DateTimePicker value={dateValue} mode="date" display="default" maximumDate={maximumDate} onChange={handleChange} />
         ))}
     </View>
   );

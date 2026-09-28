@@ -22,7 +22,7 @@ function TopBar() {
       // incomplete record behind.
       const today = todayLocalYMD();
       const open = db.attendance?.find(
-        (a) => a.facilitatorId === currentUser?.id && a.date === today && !a.timeOut
+        (a) => a.facilitatorId === currentUser?.id && a.date === today && !a.timeOut && !a.overridden
       );
       if (open) {
         await updateRecord('attendance', open.id, { timeOut: new Date().toLocaleTimeString() });

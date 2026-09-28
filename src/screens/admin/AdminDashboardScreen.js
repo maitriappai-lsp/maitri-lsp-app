@@ -53,6 +53,9 @@ export default function AdminDashboardScreen() {
     if (!datePattern.test(editDate)) {
       return Alert.alert('Invalid date', 'Date should be in YYYY-MM-DD format, e.g. 2026-09-19.');
     }
+    if (editDate > todayLocalYMD()) {
+      return Alert.alert('Date is in the future', 'Attendance can only be dated today or earlier.');
+    }
     setSavingAttendance(true);
     try {
       await updateRecord('attendance', editingAttendanceId, {
@@ -324,7 +327,7 @@ export default function AdminDashboardScreen() {
                       <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.sm }}>
                         Editing attendance -- {f?.name}
                       </Text>
-                      <Field label="Date" value={editDate} onChangeText={setEditDate} placeholder="YYYY-MM-DD" />
+                      <DateField label="Date" value={editDate} onChange={setEditDate} maximumDate={new Date()} />
                       <View style={{ flexDirection: 'row', gap: spacing.md }}>
                         <View style={{ flex: 1 }}>
                           <Field label="Time in" value={editTimeIn} onChangeText={setEditTimeIn} placeholder="10:02 AM" />
