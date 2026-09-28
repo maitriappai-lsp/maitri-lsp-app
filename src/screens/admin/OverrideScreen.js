@@ -18,7 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { Screen, Card, SectionLabel, Select, Field, DateField, TimeField, PrimaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { toLocalYMD, todayLocalYMD } from '../../utils/date';
+import { toLocalYMD, todayLocalYMD, isFutureTime } from '../../utils/date';
 
 function dateRange(from, to) {
   const dates = [];
@@ -86,6 +86,11 @@ export default function OverrideScreen() {
     const todayStr = todayLocalYMD();
     if (startDate > todayStr || (endDate && endDate > todayStr)) {
       Alert.alert('Date is in the future', 'Attendance can only be corrected for today or earlier dates.');
+      return;
+    }
+    const rangeIncludesToday = startDate === todayStr || (endDate && startDate <= todayStr && endDate >= todayStr);
+    if (rangeIncludesToday && ((timeIn && isFutureTime(todayStr, timeIn)) || (timeOut && isFutureTime(todayStr, timeOut)))) {
+      Alert.alert('Time is in the future', 'Time in and time out cannot be later than the current time.');
       return;
     }
     if (endDate && endDate < startDate) {

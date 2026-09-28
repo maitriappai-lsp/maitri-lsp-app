@@ -10,11 +10,18 @@
 // re-thrown so the calling screen's existing try/catch or .catch() can
 // surface it.
 // ---------------------------------------------------------------------------
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { apiGet, apiPost, apiPatch, apiDelete } from './api';
 import { useAuth } from '../context/AuthContext';
 
 const DataContext = createContext(null);
+
+// How often the app quietly re-fetches the shared data while it's open, so
+// records saved on another device (facilitator <-> admin) show up without a
+// sign-out/sign-in. Not literally instant -- it's a poll -- but everything
+// appears within one interval, and immediately when the app is reopened.
+const POLL_INTERVAL_MS = 15000;
 
 const EMPTY_DB = {
   resources: [],
@@ -45,11 +52,70 @@ export function DataProvider({ children }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
 
+  // Bookkeeping for the background refresh below.
+  const writesInFlightRef = useRef(0);
+  const writeVersionRef = useRef(0);
+  const pollInFlightRef = useRef(false);
+  const lastSnapshotRef = useRef(null);
+
   async function refresh() {
     const fresh = await apiGet('/api/db');
+    lastSnapshotRef.current = JSON.stringify(fresh);
     setDb(fresh);
     return fresh;
   }
+
+  // Wraps every write so the background refresh can tell one is happening
+  // (or happened during its fetch) and not overwrite fresher local state
+  // with an older server snapshot.
+  async function tracked(fn) {
+    writesInFlightRef.current += 1;
+    writeVersionRef.current += 1;
+    try {
+      return await fn();
+    } finally {
+      writesInFlightRef.current -= 1;
+      writeVersionRef.current += 1;
+    }
+  }
+
+  // Background refresh: same fetch as refresh(), but quiet -- skips if a
+  // save is in progress, drops the result if a save happened while it was
+  // fetching, and only touches state when something actually changed.
+  async function silentRefresh() {
+    if (pollInFlightRef.current || writesInFlightRef.current > 0) return;
+    pollInFlightRef.current = true;
+    const versionAtStart = writeVersionRef.current;
+    try {
+      const fresh = await apiGet('/api/db');
+      if (writeVersionRef.current !== versionAtStart) return;
+      const snapshot = JSON.stringify(fresh);
+      if (snapshot !== lastSnapshotRef.current) {
+        lastSnapshotRef.current = snapshot;
+        setDb(fresh);
+      }
+    } catch (e) {
+      console.warn('Background refresh failed', e?.message || e);
+    } finally {
+      pollInFlightRef.current = false;
+    }
+  }
+
+  // Keep data fresh while signed in: poll on a timer while the app is in
+  // the foreground, and refresh straight away when it comes back to it.
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') silentRefresh();
+    }, POLL_INTERVAL_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') silentRefresh();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -79,7 +145,7 @@ export function DataProvider({ children }) {
       // ---- generic master helpers -------------------------------------
       // Optimistic: update local state immediately, persist to the API,
       // roll back on failure.
-      addRecord: async (table, record) => {
+      addRecord: (table, record) => tracked(async () => {
         const prevDb = db;
         setDb((prev) => ({ ...prev, [table]: [...prev[table], record] }));
         try {
@@ -93,9 +159,9 @@ export function DataProvider({ children }) {
           setDb(prevDb);
           throw e;
         }
-      },
+      }),
 
-      updateRecord: async (table, id, patch) => {
+      updateRecord: (table, id, patch) => tracked(async () => {
         const prevDb = db;
         setDb((prev) => ({
           ...prev,
@@ -112,9 +178,9 @@ export function DataProvider({ children }) {
           setDb(prevDb);
           throw e;
         }
-      },
+      }),
 
-      deleteRecord: async (table, id) => {
+      deleteRecord: (table, id) => tracked(async () => {
         const prevDb = db;
         setDb((prev) => ({ ...prev, [table]: prev[table].filter((r) => r.id !== id) }));
         try {
@@ -123,7 +189,7 @@ export function DataProvider({ children }) {
           setDb(prevDb);
           throw e;
         }
-      },
+      }),
 
       nextId: (prefix, table) => nextId(prefix, db[table]),
 
@@ -142,20 +208,20 @@ export function DataProvider({ children }) {
       // Overrides get their id + timestamp from the server (an audit log
       // can't trust the client's clock), so this isn't optimistic -- it
       // waits for the server's response before adding to local state.
-      logOverride: async (override) => {
+      logOverride: (override) => tracked(async () => {
         const saved = await apiPost('/api/overrides', override);
         setDb((prev) => ({ ...prev, overrides: [saved, ...prev.overrides] }));
         return saved;
-      },
+      }),
 
-      changePassword: async (resourceId, newPassword) => {
+      changePassword: (resourceId, newPassword) => tracked(async () => {
         const { user } = await apiPost('/api/auth/change-password', { resourceId, newPassword });
         setDb((prev) => ({
           ...prev,
           resources: prev.resources.map((r) => (r.id === resourceId ? { ...r, ...user } : r)),
         }));
         return user;
-      },
+      }),
 
       // ---- lookups (unchanged -- local array finds against the cached db) --
       getBeneficiary: (id) => db.beneficiaries.find((b) => b.id === id),

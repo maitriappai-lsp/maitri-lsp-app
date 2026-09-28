@@ -16,7 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, RagChip } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { todayLocalYMD } from '../../utils/date';
+import { todayLocalYMD, parseTimeToMinutes, isFutureTime } from '../../utils/date';
 
 const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
@@ -48,6 +48,14 @@ function CompleteCheckIn({ attendanceRecord }) {
     }
     if (!timeOut.trim()) {
       Alert.alert('Time out required', 'Enter a time out.');
+      return;
+    }
+    if (parseTimeToMinutes(timeIn) == null || parseTimeToMinutes(timeOut) == null) {
+      Alert.alert('Check the times', 'Enter times like 10:02 AM.');
+      return;
+    }
+    if (isFutureTime(attendanceRecord.date, timeIn) || isFutureTime(attendanceRecord.date, timeOut)) {
+      Alert.alert('Time is in the future', 'Time in and time out cannot be later than the current time.');
       return;
     }
     setSaving(true);
@@ -214,6 +222,14 @@ export default function SessionsScreen() {
     }
     if (!timeOut.trim()) {
       Alert.alert('Time out required', 'Enter a time out.');
+      return;
+    }
+    if (parseTimeToMinutes(timeIn) == null || parseTimeToMinutes(timeOut) == null) {
+      Alert.alert('Check the times', 'Enter times like 10:02 AM.');
+      return;
+    }
+    if (isFutureTime(today, timeIn) || isFutureTime(today, timeOut)) {
+      Alert.alert('Time is in the future', 'Time in and time out cannot be later than the current time.');
       return;
     }
     if (!rag) {
