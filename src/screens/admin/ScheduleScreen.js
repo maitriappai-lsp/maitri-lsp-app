@@ -9,6 +9,7 @@ import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { parseTimeToMinutes } from '../../utils/date';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DAY_INDEX = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
@@ -80,6 +81,48 @@ export default function ScheduleScreen() {
     setStep(1);
     setGeneratedDates([]);
     setCategoryBySession({});
+  }
+
+  // ---- Edit an existing scheduled session --------------------------------
+  const [editingId, setEditingId] = useState(null);
+  const [editBeneficiaryId, setEditBeneficiaryId] = useState(null);
+  const [editFacilitatorId, setEditFacilitatorId] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function startEdit(sess) {
+    setEditingId(sess.id);
+    setEditBeneficiaryId(sess.beneficiaryId);
+    setEditFacilitatorId(sess.facilitatorId);
+    setEditDate(sess.date);
+    setEditTime(sess.time || '');
+    setEditCategoryId(sess.categoryId);
+  }
+
+  async function saveEdit() {
+    if (!editBeneficiaryId) return Alert.alert('Beneficiary required', 'Select a beneficiary.');
+    if (!editFacilitatorId) return Alert.alert('Facilitator required', 'Select a facilitator.');
+    if (!editDate) return Alert.alert('Date required', 'Pick a date.');
+    if (parseTimeToMinutes(editTime) == null) {
+      return Alert.alert('Check the time', 'Enter a time like 10:00 or 10:00 AM.');
+    }
+    setSavingEdit(true);
+    try {
+      await updateRecord('schedule', editingId, {
+        beneficiaryId: editBeneficiaryId,
+        facilitatorId: editFacilitatorId,
+        date: editDate,
+        time: editTime.trim(),
+        categoryId: editCategoryId || null,
+      });
+      setEditingId(null);
+    } catch (e) {
+      Alert.alert('Could not save', e.message || 'Please try again.');
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   const [importing, setImporting] = useState(false);
@@ -180,25 +223,78 @@ export default function ScheduleScreen() {
           .map((s) => {
             const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
             const f = db.resources.find((x) => x.id === s.facilitatorId);
+            const c = db.categories.find((x) => x.id === s.categoryId);
+
+            if (editingId === s.id) {
+              return (
+                <Card key={s.id}>
+                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.sm }}>
+                    Editing session
+                  </Text>
+                  <Select
+                    label="Beneficiary"
+                    value={editBeneficiaryId}
+                    onSelect={setEditBeneficiaryId}
+                    options={db.beneficiaries.map((x) => ({
+                      value: x.id,
+                      label: `${x.school} - ${x.class}${x.section ? ' ' + x.section : ''}`,
+                    }))}
+                  />
+                  <Select
+                    label="Facilitator"
+                    value={editFacilitatorId}
+                    onSelect={setEditFacilitatorId}
+                    options={facilitators.map((x) => ({ value: x.id, label: x.name }))}
+                  />
+                  <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                    <View style={{ flex: 1 }}>
+                      <DateField label="Date" value={editDate} onChange={setEditDate} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Field label="Time" value={editTime} onChangeText={setEditTime} placeholder="10:00" />
+                    </View>
+                  </View>
+                  <Select
+                    label="Category"
+                    value={editCategoryId}
+                    onSelect={setEditCategoryId}
+                    options={db.categories.map((x) => ({ value: x.id, label: `${x.pillar} / ${x.topic}` }))}
+                  />
+                  <PrimaryButton title={savingEdit ? 'Saving...' : 'Save changes'} onPress={saveEdit} disabled={savingEdit} />
+                  <SecondaryButton title="Cancel" onPress={() => setEditingId(null)} style={{ marginTop: spacing.sm }} />
+                </Card>
+              );
+            }
+
             return (
               <Card key={s.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <View>
+                  <View style={{ flex: 1, marginRight: spacing.md }}>
                     <Text style={{ fontWeight: '700', color: colors.text }}>{b?.school}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                       {s.date} - {s.time} - {f?.name} assigned
                     </Text>
+                    {c && (
+                      <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                        {c.pillar} / {c.topic}
+                      </Text>
+                    )}
                   </View>
-                  <TouchableOpacity
-                    onPress={() =>
-                      Alert.alert('Delete session', `Remove ${b?.school} on ${s.date}?`, [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('schedule', s.id) },
-                      ])
-                    }
-                  >
-                    <Text style={{ color: colors.red, fontWeight: '700' }}>Delete</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                    <TouchableOpacity onPress={() => startEdit(s)}>
+                      <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() =>
+                        Alert.alert('Delete session', `Remove ${b?.school} on ${s.date}?`, [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('schedule', s.id) },
+                        ])
+                      }
+                    >
+                      <Text style={{ color: colors.red, fontWeight: '700' }}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </Card>
             );
