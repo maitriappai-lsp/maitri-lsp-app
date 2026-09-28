@@ -1,17 +1,10 @@
 // SCREEN 3 (Admin): Attendance Override.
-// Two things happen here:
-//  1. "Bypass checks" -- logs a note that geofence/face were bypassed for a
-//     facilitator going forward (existing behaviour), audit-logged in the
-//     `overrides` table.
-//  2. "Correct attendance time" -- directly corrects time in/out on one or
-//     more existing attendance rows (or backfills missing ones) for a
-//     facilitator over a date or date range, per the spec's requirement
-//     that overrides be reason-logged on the attendance record itself for
-//     audit. Also mirrored into the `overrides` log so both kinds of
-//     override show up in one place below.
-// Only ACTIVE resources can be picked in either section -- an inactive
-// facilitator isn't currently working, so overriding their attendance
-// wouldn't make sense.
+// "Correct attendance time" directly corrects time in/out (and the
+// beneficiary) on one or more existing attendance rows -- or backfills
+// missing ones -- for a facilitator over a date or date range. The reason,
+// who made the change and when are stored on the attendance record itself
+// for audit. Only ACTIVE facilitators can be picked, since an inactive one
+// isn't currently working.
 import React, { useMemo, useState } from 'react';
 import { ScrollView, Text, View, Alert } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
@@ -33,35 +26,8 @@ function dateRange(from, to) {
 
 export default function OverrideScreen() {
   const { currentUser } = useAuth();
-  const { db, addRecord, updateRecord, nextId, logOverride } = useData();
+  const { db, addRecord, updateRecord, nextId } = useData();
   const activeFacilitators = db.resources.filter((r) => r.role === 'Facilitator' && r.active !== false);
-
-  // ---- Bypass checks (existing) -----------------------------------------
-  const [resourceId, setResourceId] = useState(activeFacilitators[0]?.id);
-  const [bypassGeofence, setBypassGeofence] = useState(false);
-  const [bypassFace, setBypassFace] = useState(false);
-  const [reason, setReason] = useState('');
-
-  function submitBypass() {
-    if (!reason.trim()) {
-      Alert.alert('Reason required', 'Every override must be logged with a reason for audit.');
-      return;
-    }
-    if (!bypassGeofence && !bypassFace) {
-      Alert.alert('Nothing to override', 'Toggle at least one bypass.');
-      return;
-    }
-    logOverride({
-      resourceId,
-      bypassGeofence,
-      bypassFace,
-      reason: reason.trim(),
-      loggedBy: currentUser?.id,
-    });
-    setReason('');
-    setBypassGeofence(false);
-    setBypassFace(false);
-  }
 
   // ---- Correct attendance time (new) -------------------------------------
   const [timeResourceId, setTimeResourceId] = useState(activeFacilitators[0]?.id);
@@ -180,7 +146,7 @@ export default function OverrideScreen() {
           Attendance Override
         </Text>
         <Text style={{ color: colors.textMuted, marginBottom: spacing.md }}>
-          Only active resources can be selected below. Every override is logged with a reason.
+          Only active facilitators can be selected. Every correction is saved with a reason for audit.
         </Text>
 
       <SectionLabel>Correct attendance time</SectionLabel>
@@ -235,63 +201,6 @@ export default function OverrideScreen() {
           disabled={savingTime}
         />
       </Card>
-
-      <SectionLabel>Bypass checks</SectionLabel>
-      <Card>
-        <SectionLabel>Resource (active only)</SectionLabel>
-        <Select
-          value={resourceId}
-          onSelect={setResourceId}
-          options={activeFacilitators.map((f) => ({ value: f.id, label: f.name }))}
-          placeholder="Select facilitator"
-        />
-        <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
-          <Select
-            value={bypassGeofence ? 'yes' : 'no'}
-            onSelect={(v) => setBypassGeofence(v === 'yes')}
-            options={[
-              { value: 'no', label: 'Bypass geofence: Off' },
-              { value: 'yes', label: 'Bypass geofence: On' },
-            ]}
-          />
-        </View>
-        <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
-          <Select
-            value={bypassFace ? 'yes' : 'no'}
-            onSelect={(v) => setBypassFace(v === 'yes')}
-            options={[
-              { value: 'no', label: 'Bypass face check: Off' },
-              { value: 'yes', label: 'Bypass face check: On' },
-            ]}
-          />
-        </View>
-        <Field
-          label="Reason (required)"
-          value={reason}
-          onChangeText={setReason}
-          placeholder="e.g. Facilitator's phone camera not working, verified by phone call"
-          multiline
-        />
-        <PrimaryButton title="Log override" onPress={submitBypass} />
-      </Card>
-
-      <SectionLabel>Override log</SectionLabel>
-      <View>
-        {db.overrides.length === 0 && <Text style={{ color: colors.textMuted }}>No overrides logged.</Text>}
-        {db.overrides.map((o) => {
-          const r = db.resources.find((x) => x.id === o.resourceId);
-          return (
-            <Card key={o.id}>
-              <Text style={{ fontWeight: '700', color: colors.text }}>{r?.name}</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                {new Date(o.timestamp).toLocaleString()} - geofence: {o.bypassGeofence ? 'bypassed' : 'no'}, face:{' '}
-                {o.bypassFace ? 'bypassed' : 'no'}
-              </Text>
-              <Text style={{ color: colors.text, fontSize: 13, marginTop: 4 }}>{o.reason}</Text>
-            </Card>
-          );
-        })}
-      </View>
       </ScrollView>
     </Screen>
   );
