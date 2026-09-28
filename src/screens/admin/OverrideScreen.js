@@ -73,6 +73,13 @@ export default function OverrideScreen() {
   const [timeReason, setTimeReason] = useState('');
   const [savingTime, setSavingTime] = useState(false);
 
+  // Times can't be in the future on today's date, so the time pickers
+  // enforce that whenever the chosen date (or range) includes today.
+  const todayForPickers = todayLocalYMD();
+  const rangeHitsToday =
+    startDate === todayForPickers ||
+    (!!endDate && startDate <= todayForPickers && endDate >= todayForPickers);
+
   async function submitTimeCorrection() {
     if (!timeResourceId) return Alert.alert('Resource required', 'Select a facilitator.');
     if (!timeBeneficiaryId) {
@@ -209,10 +216,10 @@ export default function OverrideScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <TimeField label="Time in" value={timeIn} onChange={setTimeIn} />
+            <TimeField label="Time in" value={timeIn} onChange={setTimeIn} blockFutureOn={rangeHitsToday ? todayForPickers : undefined} />
           </View>
           <View style={{ flex: 1 }}>
-            <TimeField label="Time out" value={timeOut} onChange={setTimeOut} />
+            <TimeField label="Time out" value={timeOut} onChange={setTimeOut} blockFutureOn={rangeHitsToday ? todayForPickers : undefined} />
           </View>
         </View>
         <Field

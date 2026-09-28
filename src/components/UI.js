@@ -11,9 +11,10 @@ import {
   FlatList,
   Platform,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { toLocalYMD } from '../utils/date';
+import { toLocalYMD, isFutureTime } from '../utils/date';
 import { colors, spacing, ragColor } from '../theme';
 
 export function Screen({ children, style }) {
@@ -173,10 +174,17 @@ export function Select({ label, value, options, onSelect, placeholder = 'Select.
   );
 }
 
-export function TimeField({ label, value, onChange, placeholder = 'HH:MM' }) {
+export function TimeField({ label, value, onChange, placeholder = 'HH:MM', blockFutureOn }) {
   // Same pattern as DateField, but mode="time" and reads/writes a plain
   // 'HH:MM' (24-hour) string so it drops straight into existing
   // time_in/time_out text fields with no format changes elsewhere.
+  //
+  // The native time dialog has no "max time" setting (unlike the date
+  // picker), so it can't stop someone choosing a later time -- whether by
+  // the clock dial or the keypad, both hand back the chosen time the same
+  // way. `blockFutureOn` (a 'YYYY-MM-DD') makes this field refuse, at the
+  // moment the time is confirmed, any time that hasn't happened yet on that
+  // date. Leave it unset for dates in the past, where any time is fine.
   const [show, setShow] = useState(false);
   const timeValue = useMemo(() => {
     const d = new Date();
@@ -192,6 +200,14 @@ export function TimeField({ label, value, onChange, placeholder = 'HH:MM' }) {
     if (event.type === 'dismissed' || !selectedDate) return;
     const hh = String(selectedDate.getHours()).padStart(2, '0');
     const mm = String(selectedDate.getMinutes()).padStart(2, '0');
+    if (blockFutureOn && isFutureTime(blockFutureOn, `${hh}:${mm}`)) {
+      // Android confirms once, so one alert is fine there. iOS's spinner
+      // reports every scroll step, so it just snaps back without nagging.
+      if (Platform.OS === 'android') {
+        Alert.alert('Time is in the future', 'Pick a time that is not later than the current time.');
+      }
+      return;
+    }
     onChange(`${hh}:${mm}`);
   }
 
