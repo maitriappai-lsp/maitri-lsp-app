@@ -7,7 +7,7 @@ import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
-import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField } from '../../components/UI';
+import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField, TimeField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { parseTimeToMinutes, todayLocalYMD } from '../../utils/date';
 
@@ -196,7 +196,7 @@ export default function ScheduleScreen() {
                 <DateField label="End date" value={endDate} onChange={setEndDate} />
               </View>
             </View>
-            <Field label="Time" value={time} onChangeText={setTime} placeholder="10:00" />
+            <TimeField label="Time" value={time} onChange={setTime} />
             <PrimaryButton title="Generate dates" onPress={handleGenerate} />
           </Card>
         )}
@@ -254,7 +254,7 @@ export default function ScheduleScreen() {
                       <DateField label="Date" value={editDate} onChange={setEditDate} minimumDate={new Date()} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Field label="Time" value={editTime} onChangeText={setEditTime} placeholder="10:00" />
+                      <TimeField label="Time" value={editTime} onChange={setEditTime} />
                     </View>
                   </View>
                   <Select

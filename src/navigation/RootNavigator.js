@@ -6,7 +6,7 @@ import LoginScreen from '../screens/LoginScreen';
 import FacilitatorTabs from './FacilitatorTabs';
 import AdminTabs from './AdminTabs';
 import { colors, spacing } from '../theme';
-import { todayLocalYMD } from '../utils/date';
+import { todayLocalYMD, nowHHMM } from '../utils/date';
 
 function TopBar() {
   const { currentUser, logout } = useAuth();
@@ -25,7 +25,7 @@ function TopBar() {
         (a) => a.facilitatorId === currentUser?.id && a.date === today && !a.timeOut && !a.overridden
       );
       if (open) {
-        await updateRecord('attendance', open.id, { timeOut: new Date().toLocaleTimeString() });
+        await updateRecord('attendance', open.id, { timeOut: nowHHMM() });
       }
     } catch (e) {
       // Don't block sign-out over this -- surface it, but still sign out.

@@ -29,6 +29,7 @@ import {
   Chip,
   PrimaryButton,
   RagChip,
+  TimeField,
 } from '../../components/UI';
 import { colors, spacing, ragColor } from '../../theme';
 import { todayLocalYMD, parseTimeToMinutes, isFutureTime } from '../../utils/date';
@@ -174,7 +175,7 @@ function toPsrFields(f) {
   };
 }
 
-function SessionFields({ f, beneficiaryPicker }) {
+function SessionFields({ f, date, beneficiaryPicker }) {
   const { db } = useData();
   // Optional extras stay tucked away unless they're already filled in.
   const [showOptional, setShowOptional] = useState(
@@ -197,10 +198,20 @@ function SessionFields({ f, beneficiaryPicker }) {
 
       <View style={{ flexDirection: 'row', gap: spacing.md }}>
         <View style={{ flex: 1 }}>
-          <Field label="Time in (required)" value={f.timeIn} onChangeText={f.setTimeIn} placeholder="10:02 AM" />
+          <TimeField
+            label="Time in (required)"
+            value={f.timeIn}
+            onChange={f.setTimeIn}
+            blockFutureOn={date === todayLocalYMD() ? date : undefined}
+          />
         </View>
         <View style={{ flex: 1 }}>
-          <Field label="Time out (required)" value={f.timeOut} onChangeText={f.setTimeOut} placeholder="10:58 AM" />
+          <TimeField
+            label="Time out (required)"
+            value={f.timeOut}
+            onChange={f.setTimeOut}
+            blockFutureOn={date === todayLocalYMD() ? date : undefined}
+          />
         </View>
       </View>
 
@@ -345,7 +356,7 @@ function CompleteCheckIn({ attendanceRecord }) {
 
       <Divider />
 
-      <SessionFields f={f} />
+      <SessionFields f={f} date={attendanceRecord.date} />
       <PrimaryButton title={saving ? 'Saving...' : 'Save session details'} onPress={save} disabled={saving} />
     </Card>
   );
@@ -454,6 +465,7 @@ export default function SessionsScreen() {
                 </Text>
                 <SessionFields
                   f={manual}
+                  date={today}
                   beneficiaryPicker={
                     <Select
                       label="Beneficiary (required)"

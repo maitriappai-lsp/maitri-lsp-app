@@ -52,3 +52,12 @@ export function isFutureTime(dateYMD, timeStr) {
   const now = new Date();
   return mins > now.getHours() * 60 + now.getMinutes();
 }
+
+// The one format times are stored/entered in everywhere: 24-hour HH:MM.
+// Used any time the app itself stamps "now" onto a record (auto time-out,
+// facilitator time in/out) so it's never out of step with what the clock
+// picker (TimeField) writes when a person enters a time by hand.
+export function nowHHMM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}

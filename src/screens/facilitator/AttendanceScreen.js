@@ -42,7 +42,7 @@ import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { todayLocalYMD } from '../../utils/date';
+import { todayLocalYMD, nowHHMM } from '../../utils/date';
 
 export default function AttendanceScreen() {
   const { currentUser } = useAuth();
@@ -164,7 +164,7 @@ export default function AttendanceScreen() {
         beneficiaryId: beneficiary.id,
         facilitatorId: currentUser.id,
         date: today,
-        timeIn: new Date().toLocaleTimeString(),
+        timeIn: nowHHMM(),
         timeOut: '',
         geoVerified: true,
         adHoc: !isScheduled,
@@ -182,7 +182,7 @@ export default function AttendanceScreen() {
   async function markTimeOut() {
     setSaving(true);
     try {
-      const value = new Date().toLocaleTimeString();
+      const value = nowHHMM();
       await updateRecord('attendance', attendanceRecordId, { timeOut: value });
       setTimeOut(value);
     } catch (e) {
