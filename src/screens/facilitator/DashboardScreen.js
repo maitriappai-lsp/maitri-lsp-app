@@ -14,7 +14,7 @@ import { Screen, Card, Field, Chip, RagChip, SecondaryButton, DateField } from '
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD } from '../../utils/date';
 
-const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
+const TABS = ['Overview', 'Schedule', 'Attendance', 'Sessions', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
 
 export default function DashboardScreen() {
@@ -53,6 +53,16 @@ export default function DashboardScreen() {
 
   const myUploads = db.uploads.filter(
     (u) => u.facilitatorId === currentUser?.id && u.date >= from && u.date <= to
+  );
+
+  const mySchedule = useMemo(
+    () =>
+      db.schedule
+        .filter((s) => s.facilitatorId === currentUser?.id)
+        .filter((s) => s.date >= from && s.date <= to)
+        .slice()
+        .sort((a, b) => (a.date === b.date ? (a.time || '').localeCompare(b.time || '') : a.date < b.date ? -1 : 1)),
+    [db, currentUser, from, to]
   );
 
   const [exporting, setExporting] = useState(false);
@@ -159,6 +169,32 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             );
           })}
+
+        {tab === 'Schedule' &&
+          (mySchedule.length === 0 ? (
+            <Text style={{ color: colors.textMuted }}>No scheduled sessions for this range.</Text>
+          ) : (
+            mySchedule.map((s) => {
+              const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
+              const cat = db.categories.find((x) => x.id === s.categoryId);
+              return (
+                <Card key={s.id}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ fontWeight: '700', color: colors.text }}>{b?.school}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>{s.date}</Text>
+                  </View>
+                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                    {b?.class} {b?.section} {s.time ? `- ${s.time}` : ''}
+                  </Text>
+                  {cat && (
+                    <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                      {cat.pillar} / {cat.topic}
+                    </Text>
+                  )}
+                </Card>
+              );
+            })
+          ))}
 
         {tab === 'Uploads' &&
           myUploads.map((u) => (

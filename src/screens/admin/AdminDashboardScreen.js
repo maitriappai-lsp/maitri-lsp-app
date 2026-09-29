@@ -211,7 +211,7 @@ export default function AdminDashboardScreen() {
         style={{ marginBottom: spacing.md }}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {tab === 'Overview' && (
           <Card>
             <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.sm }}>
@@ -263,6 +263,7 @@ export default function AdminDashboardScreen() {
                   </Text>
                   {isOpen && (
                     <View style={{ marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm }}>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Time in: {p.timeIn || '--'}   Time out: {p.timeOut || '--'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
@@ -396,12 +397,20 @@ export default function AdminDashboardScreen() {
                           <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>Edit</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          onPress={() =>
+                          onPress={() => {
+                            const linkedSessions = db.psr.filter((p) => p.attendanceId === a.id);
+                            if (linkedSessions.length > 0) {
+                              Alert.alert(
+                                'Cannot delete',
+                                `${linkedSessions.length} session record(s) are linked to this attendance record. Delete those first (Sessions tab), then delete this attendance record.`
+                              );
+                              return;
+                            }
                             Alert.alert('Delete record', 'Remove this attendance record?', [
                               { text: 'Cancel', style: 'cancel' },
                               { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('attendance', a.id) },
-                            ])
-                          }
+                            ]);
+                          }}
                         >
                           <Text style={{ color: colors.red, fontWeight: '700', fontSize: 12 }}>Delete</Text>
                         </TouchableOpacity>

@@ -9,7 +9,7 @@ import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { parseTimeToMinutes } from '../../utils/date';
+import { parseTimeToMinutes, todayLocalYMD } from '../../utils/date';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DAY_INDEX = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
@@ -105,6 +105,9 @@ export default function ScheduleScreen() {
     if (!editBeneficiaryId) return Alert.alert('Beneficiary required', 'Select a beneficiary.');
     if (!editFacilitatorId) return Alert.alert('Facilitator required', 'Select a facilitator.');
     if (!editDate) return Alert.alert('Date required', 'Pick a date.');
+    if (editDate < todayLocalYMD()) {
+      return Alert.alert('Date is in the past', 'A scheduled session cannot be dated before today.');
+    }
     if (parseTimeToMinutes(editTime) == null) {
       return Alert.alert('Check the time', 'Enter a time like 10:00 or 10:00 AM.');
     }
@@ -248,7 +251,7 @@ export default function ScheduleScreen() {
                   />
                   <View style={{ flexDirection: 'row', gap: spacing.md }}>
                     <View style={{ flex: 1 }}>
-                      <DateField label="Date" value={editDate} onChange={setEditDate} />
+                      <DateField label="Date" value={editDate} onChange={setEditDate} minimumDate={new Date()} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Field label="Time" value={editTime} onChangeText={setEditTime} placeholder="10:00" />
