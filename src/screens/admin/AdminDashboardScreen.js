@@ -8,12 +8,15 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
-import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField } from '../../components/UI';
+import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField, TimeField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD } from '../../utils/date';
+import { isFutureTime } from '../../utils/date';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
+const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
+const RAGS = ['Green', 'Amber', 'Red'];
 
 export default function AdminDashboardScreen() {
   const { db, deleteRecord, updateRecord } = useData();
@@ -71,6 +74,61 @@ export default function AdminDashboardScreen() {
       Alert.alert('Could not save', e.message || 'Please try again.');
     } finally {
       setSavingAttendance(false);
+    }
+  }
+
+  // ---- Edit a session (PSR) record ----------------------------------------
+  const [editingPsrId, setEditingPsrId] = useState(null);
+  const [editPsrCategoryId, setEditPsrCategoryId] = useState(null);
+  const [editPsrTimeIn, setEditPsrTimeIn] = useState('');
+  const [editPsrTimeOut, setEditPsrTimeOut] = useState('');
+  const [editPsrStudents, setEditPsrStudents] = useState('');
+  const [editPsrRating, setEditPsrRating] = useState('Good');
+  const [editPsrRag, setEditPsrRag] = useState('Green');
+  const [editPsrFacilitatorFeedback, setEditPsrFacilitatorFeedback] = useState('');
+  const [editPsrSchoolFeedback, setEditPsrSchoolFeedback] = useState('');
+  const [savingPsr, setSavingPsr] = useState(false);
+
+  function startEditPsr(p) {
+    setEditingPsrId(p.id);
+    setEditPsrCategoryId(p.categoryId);
+    setEditPsrTimeIn(p.timeIn || '');
+    setEditPsrTimeOut(p.timeOut || '');
+    setEditPsrStudents(String(p.studentsPresent ?? ''));
+    setEditPsrRating(p.rating || 'Good');
+    setEditPsrRag(p.rag || 'Green');
+    setEditPsrFacilitatorFeedback(p.facilitatorFeedback || '');
+    setEditPsrSchoolFeedback(p.schoolFeedback || '');
+  }
+
+  async function saveEditPsr(date) {
+    if (!editPsrCategoryId) return Alert.alert('Category required', 'Select a life skill service category.');
+    if (!editPsrTimeIn.trim() || !editPsrTimeOut.trim()) {
+      return Alert.alert('Time required', 'Time in and time out are both required.');
+    }
+    if (isFutureTime(date, editPsrTimeIn) || isFutureTime(date, editPsrTimeOut)) {
+      return Alert.alert('Time is in the future', 'Time in and time out cannot be later than the current time.');
+    }
+    if (editPsrTimeOut <= editPsrTimeIn) {
+      return Alert.alert('Check the times', 'Time out must be later than time in.');
+    }
+    setSavingPsr(true);
+    try {
+      await updateRecord('psr', editingPsrId, {
+        categoryId: editPsrCategoryId,
+        timeIn: editPsrTimeIn,
+        timeOut: editPsrTimeOut,
+        studentsPresent: Number(editPsrStudents) || 0,
+        rating: editPsrRating,
+        rag: editPsrRag,
+        facilitatorFeedback: editPsrFacilitatorFeedback,
+        schoolFeedback: editPsrSchoolFeedback,
+      });
+      setEditingPsrId(null);
+    } catch (e) {
+      Alert.alert('Could not save', e.message || 'Please try again.');
+    } finally {
+      setSavingPsr(false);
     }
   }
 
@@ -251,6 +309,80 @@ export default function AdminDashboardScreen() {
             const f = db.resources.find((x) => x.id === p.facilitatorId);
             const cat = db.categories.find((x) => x.id === p.categoryId);
             const isOpen = expandedId === p.id;
+
+            if (editingPsrId === p.id) {
+              return (
+                <Card key={p.id}>
+                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.sm }}>
+                    Editing session -- {b?.school}
+                  </Text>
+                  <Select
+                    label="Life skill service category"
+                    value={editPsrCategoryId}
+                    onSelect={setEditPsrCategoryId}
+                    options={db.categories.map((c) => ({
+                      value: c.id,
+                      label: `${c.pillar} / ${c.topic}${c.subtopic !== 'OTHERS' ? ' / ' + c.subtopic : ''}`,
+                    }))}
+                  />
+                  <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                    <View style={{ flex: 1 }}>
+                      <TimeField
+                        label="Time in"
+                        value={editPsrTimeIn}
+                        onChange={setEditPsrTimeIn}
+                        blockFutureOn={p.date === todayLocalYMD() ? p.date : undefined}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <TimeField
+                        label="Time out"
+                        value={editPsrTimeOut}
+                        onChange={setEditPsrTimeOut}
+                        blockFutureOn={p.date === todayLocalYMD() ? p.date : undefined}
+                      />
+                    </View>
+                  </View>
+                  <Field
+                    label="Students present"
+                    value={editPsrStudents}
+                    onChangeText={setEditPsrStudents}
+                    keyboardType="number-pad"
+                  />
+                  <Select
+                    label="Rating"
+                    value={editPsrRating}
+                    onSelect={setEditPsrRating}
+                    options={RATINGS.map((r) => ({ value: r, label: r }))}
+                  />
+                  <Select
+                    label="RAG status"
+                    value={editPsrRag}
+                    onSelect={setEditPsrRag}
+                    options={RAGS.map((r) => ({ value: r, label: r }))}
+                  />
+                  <Field
+                    label="Facilitator feedback"
+                    value={editPsrFacilitatorFeedback}
+                    onChangeText={setEditPsrFacilitatorFeedback}
+                    multiline
+                  />
+                  <Field
+                    label="School feedback"
+                    value={editPsrSchoolFeedback}
+                    onChangeText={setEditPsrSchoolFeedback}
+                    multiline
+                  />
+                  <PrimaryButton
+                    title={savingPsr ? 'Saving...' : 'Save changes'}
+                    onPress={() => saveEditPsr(p.date)}
+                    disabled={savingPsr}
+                  />
+                  <SecondaryButton title="Cancel" onPress={() => setEditingPsrId(null)} style={{ marginTop: spacing.sm }} />
+                </Card>
+              );
+            }
+
             return (
               <TouchableOpacity key={p.id} onPress={() => setExpandedId(isOpen ? null : p.id)}>
                 <Card>
@@ -268,17 +400,21 @@ export default function AdminDashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>School feedback: {p.schoolFeedback || '-'}</Text>
-                      <TouchableOpacity
-                        onPress={() =>
-                          Alert.alert('Delete record', 'Remove this PSR record?', [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('psr', p.id) },
-                          ])
-                        }
-                        style={{ marginTop: spacing.sm }}
-                      >
-                        <Text style={{ color: colors.red, fontWeight: '700' }}>Delete this record</Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+                        <TouchableOpacity onPress={() => startEditPsr(p)}>
+                          <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() =>
+                            Alert.alert('Delete record', 'Remove this PSR record?', [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('psr', p.id) },
+                            ])
+                          }
+                        >
+                          <Text style={{ color: colors.red, fontWeight: '700' }}>Delete this record</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
                 </Card>
@@ -331,10 +467,20 @@ export default function AdminDashboardScreen() {
                       <DateField label="Date" value={editDate} onChange={setEditDate} maximumDate={new Date()} />
                       <View style={{ flexDirection: 'row', gap: spacing.md }}>
                         <View style={{ flex: 1 }}>
-                          <Field label="Time in" value={editTimeIn} onChangeText={setEditTimeIn} placeholder="10:02 AM" />
+                          <TimeField
+                            label="Time in"
+                            value={editTimeIn}
+                            onChange={setEditTimeIn}
+                            blockFutureOn={editDate === todayLocalYMD() ? editDate : undefined}
+                          />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Field label="Time out" value={editTimeOut} onChangeText={setEditTimeOut} placeholder="10:58 AM" />
+                          <TimeField
+                            label="Time out"
+                            value={editTimeOut}
+                            onChange={setEditTimeOut}
+                            blockFutureOn={editDate === todayLocalYMD() ? editDate : undefined}
+                          />
                         </View>
                       </View>
                       <Select
