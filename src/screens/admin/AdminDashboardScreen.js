@@ -79,6 +79,8 @@ export default function AdminDashboardScreen() {
 
   // ---- Edit a session (PSR) record ----------------------------------------
   const [editingPsrId, setEditingPsrId] = useState(null);
+  const [editPsrBeneficiaryId, setEditPsrBeneficiaryId] = useState(null);
+  const [editPsrDate, setEditPsrDate] = useState('');
   const [editPsrCategoryId, setEditPsrCategoryId] = useState(null);
   const [editPsrTimeIn, setEditPsrTimeIn] = useState('');
   const [editPsrTimeOut, setEditPsrTimeOut] = useState('');
@@ -87,10 +89,15 @@ export default function AdminDashboardScreen() {
   const [editPsrRag, setEditPsrRag] = useState('Green');
   const [editPsrFacilitatorFeedback, setEditPsrFacilitatorFeedback] = useState('');
   const [editPsrSchoolFeedback, setEditPsrSchoolFeedback] = useState('');
+  const [editPsrExternalOrgName, setEditPsrExternalOrgName] = useState('');
+  const [editPsrExternalResources, setEditPsrExternalResources] = useState('');
+  const [editPsrPhotosUploaded, setEditPsrPhotosUploaded] = useState(false);
   const [savingPsr, setSavingPsr] = useState(false);
 
   function startEditPsr(p) {
     setEditingPsrId(p.id);
+    setEditPsrBeneficiaryId(p.beneficiaryId);
+    setEditPsrDate(p.date);
     setEditPsrCategoryId(p.categoryId);
     setEditPsrTimeIn(p.timeIn || '');
     setEditPsrTimeOut(p.timeOut || '');
@@ -99,22 +106,53 @@ export default function AdminDashboardScreen() {
     setEditPsrRag(p.rag || 'Green');
     setEditPsrFacilitatorFeedback(p.facilitatorFeedback || '');
     setEditPsrSchoolFeedback(p.schoolFeedback || '');
+    setEditPsrExternalOrgName(p.externalOrgName || '');
+    setEditPsrExternalResources(p.externalResources || '');
+    setEditPsrPhotosUploaded(!!p.photosUploaded);
   }
 
-  async function saveEditPsr(date) {
+  async function saveEditPsr(psr) {
+    if (!editPsrBeneficiaryId) return Alert.alert('Beneficiary required', 'Select a beneficiary.');
+    if (!editPsrDate) return Alert.alert('Date required', 'Pick a date.');
+    if (editPsrDate > todayLocalYMD()) {
+      return Alert.alert('Date is in the future', 'A session cannot be dated after today.');
+    }
     if (!editPsrCategoryId) return Alert.alert('Category required', 'Select a life skill service category.');
     if (!editPsrTimeIn.trim() || !editPsrTimeOut.trim()) {
       return Alert.alert('Time required', 'Time in and time out are both required.');
     }
-    if (isFutureTime(date, editPsrTimeIn) || isFutureTime(date, editPsrTimeOut)) {
+    if (isFutureTime(editPsrDate, editPsrTimeIn) || isFutureTime(editPsrDate, editPsrTimeOut)) {
       return Alert.alert('Time is in the future', 'Time in and time out cannot be later than the current time.');
     }
     if (editPsrTimeOut <= editPsrTimeIn) {
       return Alert.alert('Check the times', 'Time out must be later than time in.');
     }
+
+    // A session must always sit on top of a real check-in. If the date
+    // and/or beneficiary changed, re-find the attendance record it should
+    // now be linked to, rather than leaving the old link pointing at a
+    // record for a different day/beneficiary.
+    const matchingAttendance = db.attendance.find(
+      (a) =>
+        a.facilitatorId === psr.facilitatorId &&
+        a.beneficiaryId === editPsrBeneficiaryId &&
+        a.date === editPsrDate
+    );
+    if (!matchingAttendance) {
+      const b = db.beneficiaries.find((x) => x.id === editPsrBeneficiaryId);
+      Alert.alert(
+        'No matching attendance record',
+        `${b?.school || 'This beneficiary'} has no attendance record for ${psr.facilitatorId ? db.resources.find((r) => r.id === psr.facilitatorId)?.name : 'this facilitator'} on ${editPsrDate}. Create or correct that attendance record first (Attendance tab, or Attendance Override), then edit this session again.`
+      );
+      return;
+    }
+
     setSavingPsr(true);
     try {
       await updateRecord('psr', editingPsrId, {
+        beneficiaryId: editPsrBeneficiaryId,
+        date: editPsrDate,
+        attendanceId: matchingAttendance.id,
         categoryId: editPsrCategoryId,
         timeIn: editPsrTimeIn,
         timeOut: editPsrTimeOut,
@@ -123,6 +161,9 @@ export default function AdminDashboardScreen() {
         rag: editPsrRag,
         facilitatorFeedback: editPsrFacilitatorFeedback,
         schoolFeedback: editPsrSchoolFeedback,
+        externalOrgName: editPsrExternalOrgName || null,
+        externalResources: editPsrExternalResources || null,
+        photosUploaded: editPsrPhotosUploaded,
       });
       setEditingPsrId(null);
     } catch (e) {
@@ -317,6 +358,16 @@ export default function AdminDashboardScreen() {
                     Editing session -- {b?.school}
                   </Text>
                   <Select
+                    label="Beneficiary"
+                    value={editPsrBeneficiaryId}
+                    onSelect={setEditPsrBeneficiaryId}
+                    options={db.beneficiaries.map((x) => ({
+                      value: x.id,
+                      label: `${x.school} - ${x.class}${x.section ? ' ' + x.section : ''}`,
+                    }))}
+                  />
+                  <DateField label="Date" value={editPsrDate} onChange={setEditPsrDate} maximumDate={new Date()} />
+                  <Select
                     label="Life skill service category"
                     value={editPsrCategoryId}
                     onSelect={setEditPsrCategoryId}
@@ -331,7 +382,7 @@ export default function AdminDashboardScreen() {
                         label="Time in"
                         value={editPsrTimeIn}
                         onChange={setEditPsrTimeIn}
-                        blockFutureOn={p.date === todayLocalYMD() ? p.date : undefined}
+                        blockFutureOn={editPsrDate === todayLocalYMD() ? editPsrDate : undefined}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -339,7 +390,7 @@ export default function AdminDashboardScreen() {
                         label="Time out"
                         value={editPsrTimeOut}
                         onChange={setEditPsrTimeOut}
-                        blockFutureOn={p.date === todayLocalYMD() ? p.date : undefined}
+                        blockFutureOn={editPsrDate === todayLocalYMD() ? editPsrDate : undefined}
                       />
                     </View>
                   </View>
@@ -373,9 +424,31 @@ export default function AdminDashboardScreen() {
                     onChangeText={setEditPsrSchoolFeedback}
                     multiline
                   />
+                  <Field
+                    label="External org name"
+                    value={editPsrExternalOrgName}
+                    onChangeText={setEditPsrExternalOrgName}
+                    placeholder="e.g. a partner NGO involved in this session"
+                  />
+                  <Field
+                    label="External resources"
+                    value={editPsrExternalResources}
+                    onChangeText={setEditPsrExternalResources}
+                    placeholder="e.g. materials or resources an external org provided"
+                    multiline
+                  />
+                  <SectionLabel>Photos taken and shared</SectionLabel>
+                  <Select
+                    value={editPsrPhotosUploaded ? 'yes' : 'no'}
+                    onSelect={(v) => setEditPsrPhotosUploaded(v === 'yes')}
+                    options={[
+                      { value: 'no', label: 'No' },
+                      { value: 'yes', label: 'Yes' },
+                    ]}
+                  />
                   <PrimaryButton
                     title={savingPsr ? 'Saving...' : 'Save changes'}
-                    onPress={() => saveEditPsr(p.date)}
+                    onPress={() => saveEditPsr(p)}
                     disabled={savingPsr}
                   />
                   <SecondaryButton title="Cancel" onPress={() => setEditingPsrId(null)} style={{ marginTop: spacing.sm }} />
