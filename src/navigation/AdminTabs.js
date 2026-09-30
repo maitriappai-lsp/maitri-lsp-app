@@ -6,10 +6,11 @@ import ScheduleScreen from '../screens/admin/ScheduleScreen';
 import OverrideScreen from '../screens/admin/OverrideScreen';
 import ContentAdminScreen from '../screens/admin/ContentAdminScreen';
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
+import SearchScreen from '../screens/admin/SearchScreen';
 
 const Tab = createBottomTabNavigator();
 
-// Bottom nav order per spec: Masters · Schedule · Override · Content · Dashboard
+// Bottom nav order per spec: Masters · Schedule · Override · Content · Dashboard · Search
 // (Admin also has everything a Facilitator has -- see App.js's RootNavigator
 // for the "Switch to facilitator view" entry point into FacilitatorTabs.)
 export default function AdminTabs() {
@@ -27,6 +28,7 @@ export default function AdminTabs() {
       <Tab.Screen name="Override" component={OverrideScreen} />
       <Tab.Screen name="Content" component={ContentAdminScreen} />
       <Tab.Screen name="Dashboard" component={AdminDashboardScreen} />
+      <Tab.Screen name="Search" component={SearchScreen} />
     </Tab.Navigator>
   );
 }

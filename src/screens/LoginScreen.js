@@ -3,7 +3,7 @@
 // stubbed "forgot password" flow (real version should trigger an
 // Admin-mediated reset per the spec, since there is no self-signup).
 import React, { useState } from 'react';
-import { Text, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, Alert, KeyboardAvoidingView, Platform, Image, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../data/store';
 import { Screen, Card, Field, PrimaryButton, SecondaryButton } from '../components/UI';
@@ -44,6 +44,13 @@ export default function LoginScreen() {
   if (pendingUser) {
     return (
       <Screen style={{ justifyContent: 'center' }}>
+        <View style={{ alignItems: 'center', marginBottom: spacing.lg }}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={{ width: 160, height: 57 }}
+            resizeMode="contain"
+          />
+        </View>
         <Card>
           <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: spacing.xs, color: colors.text }}>
             Set a new password
@@ -67,9 +74,17 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
+      enabled={Platform.OS === 'ios'}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Screen style={{ justifyContent: 'center' }}>
+        <View style={{ alignItems: 'center', marginBottom: spacing.lg }}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={{ width: 180, height: 64 }}
+            resizeMode="contain"
+          />
+        </View>
         <Text style={{ fontSize: 24, fontWeight: '800', color: colors.text, marginBottom: spacing.xs }}>
           Maitri LSP
         </Text>
