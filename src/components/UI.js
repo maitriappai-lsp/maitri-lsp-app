@@ -26,6 +26,11 @@ export function Screen({ children, style }) {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
+      // Android's own window resize (see app.json's softwareKeyboardLayoutMode)
+      // handles keyboard avoidance on its own; having this component also
+      // active there is what caused the keyboard to flash and immediately
+      // close on some Android devices, so it's fully disabled there.
+      enabled={Platform.OS === 'ios'}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
