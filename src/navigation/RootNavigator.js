@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Image } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../data/store';
 import LoginScreen from '../screens/LoginScreen';
@@ -50,11 +50,18 @@ function TopBar() {
         borderBottomColor: colors.border,
       }}
     >
-      <View>
-        <Text style={{ fontWeight: '700', color: colors.text }}>{currentUser?.name}</Text>
-        <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700' }}>
-          {currentUser?.role === 'Admin' ? 'Programme Admin' : 'LSP Resource'}
-        </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Image
+          source={require('../../assets/logo.png')}
+          style={{ width: 56, height: 20, marginRight: spacing.sm }}
+          resizeMode="contain"
+        />
+        <View>
+          <Text style={{ fontWeight: '700', color: colors.text }}>{currentUser?.name}</Text>
+          <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700' }}>
+            {currentUser?.role === 'Admin' ? 'Programme Admin' : 'LSP Resource'}
+          </Text>
+        </View>
       </View>
       <TouchableOpacity onPress={handleSignOut} disabled={signingOut}>
         <Text style={{ color: colors.textMuted, fontWeight: '600' }}>
