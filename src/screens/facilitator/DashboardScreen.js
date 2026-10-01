@@ -113,11 +113,36 @@ export default function DashboardScreen() {
         placeholder="e.g. empathy, red, Canal road"
       />
 
-      <View style={{ flexDirection: 'row', marginBottom: spacing.sm }}>
-        {TABS.map((t) => (
-          <Chip key={t} label={t} active={tab === t} onPress={() => setTab(t)} />
-        ))}
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ height: 40, flexGrow: 0, marginBottom: spacing.sm }}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}
+      >
+        {TABS.map((t) => {
+          const active = tab === t;
+          return (
+            <TouchableOpacity
+              key={t}
+              onPress={() => setTab(t)}
+              style={{
+                height: 32,
+                justifyContent: 'center',
+                paddingHorizontal: 12,
+                marginRight: spacing.xs,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: active ? colors.primary : colors.border,
+                backgroundColor: active ? colors.primary : colors.chipBg,
+              }}
+            >
+              <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: active ? '#fff' : colors.text }}>
+                {t}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {tab === 'Sessions' && (
         <View style={{ flexDirection: 'row', marginBottom: spacing.sm }}>

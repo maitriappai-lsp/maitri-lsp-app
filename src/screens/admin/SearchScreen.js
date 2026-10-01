@@ -252,7 +252,61 @@ export default function SearchScreen() {
     setSelectedIds(new Set());
   }
 
-  async function doDelete(ids) {
+  // Which other tables point at a row in this table, and the field they
+  // use to do it. Checked before any delete, so deleting (say) a
+  // Beneficiary that still has Attendance/Schedule/Sessions/Uploads rows
+  // is blocked outright rather than silently orphaning those rows (the
+  // database itself just sets the link to null on delete, which is not
+  // the same as the data staying meaningful).
+  const DEPENDENTS = {
+    geo: [{ childDbKey: 'beneficiaries', childField: 'geoId', label: 'Beneficiaries' }],
+    beneficiaries: [
+      { childDbKey: 'attendance', childField: 'beneficiaryId', label: 'Attendance' },
+      { childDbKey: 'schedule', childField: 'beneficiaryId', label: 'Schedule' },
+      { childDbKey: 'psr', childField: 'beneficiaryId', label: 'Sessions' },
+      { childDbKey: 'uploads', childField: 'beneficiaryId', label: 'Uploads' },
+    ],
+    categories: [
+      { childDbKey: 'schedule', childField: 'categoryId', label: 'Schedule' },
+      { childDbKey: 'psr', childField: 'categoryId', label: 'Sessions' },
+      { childDbKey: 'uploads', childField: 'categoryId', label: 'Uploads' },
+      { childDbKey: 'content', childField: 'categoryId', label: 'Content' },
+    ],
+    resources: [
+      { childDbKey: 'attendance', childField: 'facilitatorId', label: 'Attendance' },
+      { childDbKey: 'schedule', childField: 'facilitatorId', label: 'Schedule' },
+      { childDbKey: 'psr', childField: 'facilitatorId', label: 'Sessions' },
+      { childDbKey: 'uploads', childField: 'facilitatorId', label: 'Uploads' },
+      { childDbKey: 'content', childField: 'uploadedBy', label: 'Content (uploaded by)' },
+    ],
+    attendance: [{ childDbKey: 'psr', childField: 'attendanceId', label: 'Sessions' }],
+  };
+
+  // Splits a candidate id list into those safe to delete and those with at
+  // least one dependent elsewhere, plus a per-child-table count across all
+  // blocked ids combined (so the warning says e.g. "34 Attendance, 20
+  // Sessions" rather than a confusing per-row breakdown).
+  function splitByDependents(ids) {
+    const rules = DEPENDENTS[config.dbKey];
+    if (!rules || rules.length === 0) return { deletable: ids, blocked: [], blockedCounts: [] };
+
+    const idSet = new Set(ids);
+    const blocked = new Set();
+    const counts = [];
+    for (const rule of rules) {
+      const childRows = db[rule.childDbKey] || [];
+      const matching = childRows.filter((r) => idSet.has(r[rule.childField]));
+      matching.forEach((r) => blocked.add(r[rule.childField]));
+      if (matching.length > 0) counts.push({ label: rule.label, count: matching.length });
+    }
+    return {
+      deletable: ids.filter((id) => !blocked.has(id)),
+      blocked: ids.filter((id) => blocked.has(id)),
+      blockedCounts: counts,
+    };
+  }
+
+
     setBusy(true);
     const failed = [];
     const CHUNK = 8;
@@ -276,25 +330,51 @@ export default function SearchScreen() {
   }
 
   function handleDeletePress() {
-    if (selectedIds.size > 0) {
-      const ids = [...selectedIds];
+    const candidateIds = selectedIds.size > 0 ? [...selectedIds] : allRows.map((r) => r.id);
+    if (candidateIds.length === 0) return Alert.alert('Nothing to delete', `${config.label} has no records.`);
+
+    const { deletable, blocked, blockedCounts } = splitByDependents(candidateIds);
+    const usingSelection = selectedIds.size > 0;
+
+    if (blocked.length > 0) {
+      const breakdown = blockedCounts.map((c) => `${c.count} ${c.label}`).join(', ');
+      const header = usingSelection
+        ? `${blocked.length} of your ${candidateIds.length} selected record(s)`
+        : `${blocked.length} of the ${candidateIds.length} record(s) in ${config.label}`;
+      const message =
+        `${header} can't be deleted -- they still have linked records: ${breakdown}. ` +
+        `Delete those linked records first (from their own tab here in Search), then come back and delete ${usingSelection ? 'these' : 'the rest'}.` +
+        (deletable.length > 0 ? `\n\nThe other ${deletable.length} have no linked records and can be deleted now.` : '');
+
+      const buttons = [{ text: 'Cancel', style: 'cancel' }];
+      if (deletable.length > 0) {
+        buttons.push({
+          text: `Delete the ${deletable.length} that are clear`,
+          style: 'destructive',
+          onPress: () => doDelete(deletable),
+        });
+      }
+      Alert.alert('Some records have linked data', message, buttons);
+      return;
+    }
+
+    // Nothing blocked -- same confirmation as before.
+    if (usingSelection) {
       Alert.alert(
         'Delete selected records',
-        `Delete ${ids.length} selected record(s) from ${config.label}? This cannot be undone.`,
+        `Delete ${deletable.length} selected record(s) from ${config.label}? This cannot be undone.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: `Delete ${ids.length}`, style: 'destructive', onPress: () => doDelete(ids) },
+          { text: `Delete ${deletable.length}`, style: 'destructive', onPress: () => doDelete(deletable) },
         ]
       );
     } else {
-      const ids = allRows.map((r) => r.id);
-      if (ids.length === 0) return Alert.alert('Nothing to delete', `${config.label} has no records.`);
       Alert.alert(
         'Delete ALL records',
-        `No records are selected, so this deletes every record in ${config.label} -- all ${ids.length} of them, not just what your current search/filter is showing. This cannot be undone.`,
+        `No records are selected, so this deletes every record in ${config.label} -- all ${deletable.length} of them, not just what your current search/filter is showing. This cannot be undone.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: `Delete all ${ids.length}`, style: 'destructive', onPress: () => doDelete(ids) },
+          { text: `Delete all ${deletable.length}`, style: 'destructive', onPress: () => doDelete(deletable) },
         ]
       );
     }
@@ -329,12 +409,38 @@ export default function SearchScreen() {
     <Screen>
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.sm }}>Search</Text>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
-        <View style={{ flexDirection: 'row' }}>
-          {TABLE_CONFIGS.map((c) => (
-            <Chip key={c.key} label={c.label} active={c.key === activeKey} onPress={() => switchTable(c.key)} />
-          ))}
-        </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ height: 40, flexGrow: 0, marginBottom: spacing.md }}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}
+      >
+        {TABLE_CONFIGS.map((c) => {
+          const active = c.key === activeKey;
+          return (
+            <TouchableOpacity
+              key={c.key}
+              onPress={() => switchTable(c.key)}
+              style={{
+                height: 32,
+                justifyContent: 'center',
+                paddingHorizontal: 12,
+                marginRight: spacing.xs,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: active ? colors.primary : colors.border,
+                backgroundColor: active ? colors.primary : colors.chipBg,
+              }}
+            >
+              <Text
+                numberOfLines={1}
+                style={{ fontSize: 13, fontWeight: '600', color: active ? '#fff' : colors.text }}
+              >
+                {c.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       <Field label="Search" value={query} onChangeText={setQuery} placeholder={`Search ${config.label}...`} />
