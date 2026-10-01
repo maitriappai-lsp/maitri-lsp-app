@@ -93,7 +93,7 @@ export function Chip({ label, active, onPress, color }) {
         active && { backgroundColor: color || colors.primary, borderColor: color || colors.primary },
       ]}
     >
-      <Text style={[styles.chipText, active && { color: '#fff' }]}>{label}</Text>
+      <Text style={[styles.chipText, active && { color: '#fff' }]} numberOfLines={1}>{label}</Text>
     </TouchableOpacity>
   );
 }

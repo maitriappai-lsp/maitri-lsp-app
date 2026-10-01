@@ -166,7 +166,7 @@ const TABLE_CONFIGS = [
   {
     key: 'categories',
     dbKey: 'categories',
-    label: 'Life Skills Categories',
+    label: 'Life Skills',
     dateField: null,
     searchText: (r) => [r.pillar, r.topic, r.subtopic].filter(Boolean).join(' '),
     summary: (r) => `${r.pillar}${r.topic ? ' / ' + r.topic : ''}${r.subtopic && r.subtopic !== 'OTHERS' ? ' / ' + r.subtopic : ''}`,
@@ -330,7 +330,7 @@ export default function SearchScreen() {
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.sm }}>Search</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
-        <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+        <View style={{ flexDirection: 'row' }}>
           {TABLE_CONFIGS.map((c) => (
             <Chip key={c.key} label={c.label} active={c.key === activeKey} onPress={() => switchTable(c.key)} />
           ))}
