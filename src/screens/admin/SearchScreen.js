@@ -306,7 +306,7 @@ export default function SearchScreen() {
     };
   }
 
-
+  async function doDelete(ids) {
     setBusy(true);
     const failed = [];
     const CHUNK = 8;

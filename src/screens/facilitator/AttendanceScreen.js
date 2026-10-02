@@ -10,17 +10,27 @@
 // If the resolved beneficiary wasn't on today's schedule for this
 // facilitator, that's flagged as an ad-hoc visit rather than blocked.
 //
-// The location check now runs automatically as soon as this screen opens
-// (no manual button tap needed) -- a re-check button is still there in case
-// the first attempt fails and they want to retry after moving. Time In
-// stays disabled until the check passes and the face check passes.
+// The location check runs automatically as soon as this screen opens (no
+// manual button tap needed) -- a re-check button is still there in case the
+// first attempt fails and they want to retry after moving. Time In stays
+// disabled until the check passes and the face check passes.
 //
-// NOTE: fully automatic time-in/time-out based on continuously moving
-// into/out of the geofence (not just a one-time check) is a planned
-// follow-up -- deferred for now, since a version that also works with the
-// phone locked/app backgrounded needs a custom EAS build with background
-// location permissions (not available in Expo Go, which this app currently
-// runs through). Both time in and time out are manual button taps here.
+// AUTOMATIC time out: once timed in, a continuous foreground location watch
+// (expo-location's watchPositionAsync) checks whether the facilitator is
+// still inside the geofence they checked into. If they've been continuously
+// outside it for EXIT_GRACE_MS, time out fires on its own. The grace period
+// exists because raw GPS readings jitter near a boundary -- without it, one
+// noisy reading near the edge could time someone out incorrectly. A manual
+// "Mark time out" button stays available too.
+//
+// IMPORTANT LIMITATION: this only runs while the app is open and the screen
+// is active (foreground). If the phone is locked or the app is
+// backgrounded, location updates stop and auto time-out won't fire until
+// the app is reopened -- at which point it re-evaluates immediately. True
+// background geofencing (works with the phone locked/in a pocket) needs
+// expo-location's startGeofencingAsync + a TaskManager background task,
+// extra OS permissions, and a custom EAS build -- a bigger, separate piece
+// of work from this foreground version.
 //
 // Only one open (not-timed-out) attendance session is allowed per
 // facilitator per day: if they already have one, this screen loads it back
@@ -28,13 +38,13 @@
 //
 // Marking Time In creates a real attendance record (geoVerified: true,
 // adHoc: true if it wasn't scheduled) so it shows up in both dashboards'
-// Attendance tab. Marking Time Out updates that same record. The
-// session-quality side (category, rating, feedback, headcount) is filled in
-// afterward on the Sessions screen, which lists today's checked-in records
-// to finish -- and refuses to let a session be logged at all for a day with
-// no attendance record, so PSR can't exist without a real check-in behind
-// it.
-import React, { useEffect, useMemo, useState } from 'react';
+// Attendance tab. Marking (or auto-marking) Time Out updates that same
+// record. The session-quality side (category, rating, feedback, headcount)
+// is filled in afterward on the Sessions screen, which lists today's
+// checked-in records to finish -- and refuses to let a session be logged at
+// all for a day with no attendance record, so PSR can't exist without a
+// real check-in behind it.
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View, Alert, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
@@ -43,6 +53,10 @@ import { findGeofenceMatch } from '../../utils/geofence';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
+
+// How long the facilitator must be continuously outside the checked-in
+// geofence before auto time-out fires.
+const EXIT_GRACE_MS = 90 * 1000;
 
 export default function AttendanceScreen() {
   const { currentUser } = useAuth();
@@ -61,15 +75,26 @@ export default function AttendanceScreen() {
   const [beneficiaryId, setBeneficiaryId] = useState(null);
   const [faceVerified, setFaceVerified] = useState(false);
   const [attendanceRecordId, setAttendanceRecordId] = useState(null);
+  const [checkedInGeoId, setCheckedInGeoId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [timeIn, setTimeIn] = useState(null);
   const [timeOut, setTimeOut] = useState(null);
   const [resumedOpenSession, setResumedOpenSession] = useState(false);
+  const [autoWatching, setAutoWatching] = useState(false);
 
   const beneficiary = beneficiaryId ? getBeneficiary(beneficiaryId) : null;
   const isScheduled = beneficiary
     ? todaysSchedule.some((s) => s.beneficiaryId === beneficiary.id)
     : false;
+
+  const stateRef = useRef({});
+  useEffect(() => {
+    stateRef.current = { timeIn, timeOut, checkedInGeoId, saving };
+  }, [timeIn, timeOut, checkedInGeoId, saving]);
+
+  const outsideSinceRef = useRef(null);
+  const autoActionInFlightRef = useRef(false);
+  const watchSubRef = useRef(null);
 
   // On open: if there's already an open (not timed-out) session for today,
   // resume it instead of allowing a second time-in. Otherwise, run the
@@ -84,10 +109,49 @@ export default function AttendanceScreen() {
       setAttendanceRecordId(open.id);
       setBeneficiaryId(open.beneficiaryId);
       setTimeIn(open.timeIn);
+      const openBeneficiary = getBeneficiary(open.beneficiaryId);
+      setCheckedInGeoId(openBeneficiary?.geoId || null);
     } else {
       checkLocation();
     }
-    // Only on first mount -- re-checks after that are the explicit button.
+
+    let cancelled = false;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted' || cancelled) return;
+      watchSubRef.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 15000, distanceInterval: 10 },
+        (pos) => {
+          const s = stateRef.current;
+          if (!s.timeIn || s.timeOut) return; // only watching for exit while a session is open
+          const match = findGeofenceMatch(db.geo, pos.coords.latitude, pos.coords.longitude);
+          const stillInside = !!match && match.id === s.checkedInGeoId;
+          if (stillInside) {
+            outsideSinceRef.current = null;
+            return;
+          }
+          if (!outsideSinceRef.current) outsideSinceRef.current = Date.now();
+          const outsideMs = Date.now() - outsideSinceRef.current;
+          if (outsideMs >= EXIT_GRACE_MS && !s.saving && !autoActionInFlightRef.current) {
+            autoActionInFlightRef.current = true;
+            markTimeOut({ auto: true }).finally(() => {
+              autoActionInFlightRef.current = false;
+            });
+          }
+        }
+      );
+      if (!cancelled) setAutoWatching(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (watchSubRef.current) {
+        watchSubRef.current.remove();
+        watchSubRef.current = null;
+      }
+    };
+    // Only on first mount -- re-checks after that are the explicit button,
+    // and the watch subscription reads current state via stateRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
@@ -98,9 +162,11 @@ export default function AttendanceScreen() {
     setBeneficiaryId(null);
     setFaceVerified(false);
     setAttendanceRecordId(null);
+    setCheckedInGeoId(null);
     setTimeIn(null);
     setTimeOut(null);
     setResumedOpenSession(false);
+    outsideSinceRef.current = null;
   }
 
   async function checkLocation() {
@@ -172,6 +238,8 @@ export default function AttendanceScreen() {
       const saved = await addRecord('attendance', record);
       setAttendanceRecordId(saved.id);
       setTimeIn(record.timeIn);
+      setCheckedInGeoId(geoMatch.id);
+      outsideSinceRef.current = null;
     } catch (e) {
       Alert.alert('Could not save time in', e.message || 'Please try again.');
     } finally {
@@ -179,12 +247,15 @@ export default function AttendanceScreen() {
     }
   }
 
-  async function markTimeOut() {
+  async function markTimeOut({ auto = false } = {}) {
     setSaving(true);
     try {
       const value = nowHHMM();
       await updateRecord('attendance', attendanceRecordId, { timeOut: value });
       setTimeOut(value);
+      if (auto) {
+        Alert.alert('Timed out automatically', `You moved out of the geofence, so time out was marked at ${value}.`);
+      }
     } catch (e) {
       Alert.alert('Could not save time out', e.message || 'Please try again.');
     } finally {
@@ -202,12 +273,19 @@ export default function AttendanceScreen() {
           Today -- {new Date().toDateString()}
         </Text>
 
+        {autoWatching && timeIn && !timeOut && (
+          <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: spacing.md }}>
+            Watching your location -- time out will be marked automatically if you leave the site. Keep the app
+            open for this to work.
+          </Text>
+        )}
+
         {resumedOpenSession && (
           <Card>
             <SectionLabel>Open session from earlier today</SectionLabel>
             <Text style={{ color: colors.textMuted, fontSize: 13 }}>
               {beneficiary?.school} {beneficiary?.class} {beneficiary?.section} -- timed in at {timeIn}. Mark time
-              out below when the session ends.
+              out below when the session ends, or leave the site and it'll be marked automatically.
             </Text>
           </Card>
         )}
@@ -305,7 +383,7 @@ export default function AttendanceScreen() {
               onPress={markTimeIn}
             />
           ) : !timeOut ? (
-            <PrimaryButton title={saving ? 'Saving...' : 'Mark time out'} disabled={saving} onPress={markTimeOut} />
+            <PrimaryButton title={saving ? 'Saving...' : 'Mark time out'} disabled={saving} onPress={() => markTimeOut()} />
           ) : (
             <Text style={{ color: colors.green, fontWeight: '700', textAlign: 'center' }}>
               Session attendance complete

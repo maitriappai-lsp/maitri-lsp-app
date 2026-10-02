@@ -4,7 +4,7 @@
 // wire to a server-side exceljs endpoint per Section 6 when the backend
 // exists; client-side you could also use a library like react-native-xlsx).
 import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
+import { ScrollView, Text, View, Alert, TouchableOpacity, Linking } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useAuth } from '../../context/AuthContext';
@@ -188,6 +188,9 @@ export default function DashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time: {p.timeIn} - {p.timeOut}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>School feedback: {p.schoolFeedback || '-'}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>External org name: {p.externalOrgName || '-'}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>External resources: {p.externalResources || '-'}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Photos taken and shared: {p.photosUploaded ? 'Yes' : 'No'}</Text>
                     </View>
                   )}
                 </Card>
@@ -226,6 +229,13 @@ export default function DashboardScreen() {
             <Card key={u.id}>
               <Text style={{ fontWeight: '700', color: colors.text }}>{u.fileName}</Text>
               <Text style={{ color: colors.textMuted, fontSize: 13 }}>{u.date}</Text>
+              {u.fileUrl ? (
+                <SecondaryButton title="View" onPress={() => Linking.openURL(u.fileUrl)} style={{ marginTop: spacing.sm }} />
+              ) : (
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
+                  No file attached -- metadata only.
+                </Text>
+              )}
             </Card>
           ))}
 
