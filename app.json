@@ -11,10 +11,23 @@
       "resizeMode": "contain",
       "backgroundColor": "#F7F3EA"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "org.maitritrust.lsp",
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "CAMERA"],
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -25,7 +38,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "org.maitritrust.lsp",
       "infoPlist": {
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "plugins": [
@@ -39,8 +54,15 @@
       ],
       [
         "expo-camera",
-        { "cameraPermission": "Allow Maitri LSP to use the camera for facial attendance check." }
+        {
+          "cameraPermission": "Allow Maitri LSP to use the camera for facial attendance check."
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "aad05785-75a0-4d20-a9f3-5070445e8a47"
+      }
+    }
   }
 }
