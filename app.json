@@ -9,7 +9,7 @@
     "assetBundlePatterns": ["**/*"],
     "android": {
       "package": "org.maitritrust.lsp",
-      "permissions": ["ACCESS_FINE_LOCATION", "CAMERA"],
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_BACKGROUND_LOCATION", "CAMERA"],
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -18,12 +18,19 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.maitritrust.lsp"
+      "bundleIdentifier": "org.maitritrust.lsp",
+      "infoPlist": {
+        "UIBackgroundModes": ["location"]
+      }
     },
     "plugins": [
       [
         "expo-location",
-        { "locationAlwaysAndWhenInUsePermission": "Allow Maitri LSP to check you are at the school for attendance." }
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Maitri LSP to check you are at the school for attendance, and to automatically mark time out when you leave -- including when the app is closed or your phone is locked.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
       ],
       [
         "expo-camera",

@@ -50,6 +50,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
+import { registerGeofences } from '../../background/geofenceTask';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
@@ -81,6 +82,7 @@ export default function AttendanceScreen() {
   const [timeOut, setTimeOut] = useState(null);
   const [resumedOpenSession, setResumedOpenSession] = useState(false);
   const [autoWatching, setAutoWatching] = useState(false);
+  const [autoWatchMode, setAutoWatchMode] = useState(null); // 'background' | 'foreground' | null
 
   const beneficiary = beneficiaryId ? getBeneficiary(beneficiaryId) : null;
   const isScheduled = beneficiary
@@ -117,6 +119,18 @@ export default function AttendanceScreen() {
 
     let cancelled = false;
     (async () => {
+      // Prefer true background geofencing -- it keeps working with the
+      // phone locked or the app closed. Only fall back to the foreground-
+      // only watcher (which stops the moment the screen isn't active) when
+      // background permission isn't available.
+      const bgResult = await registerGeofences(db.geo);
+      if (cancelled) return;
+      if (bgResult.ok) {
+        setAutoWatchMode('background');
+        setAutoWatching(true);
+        return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted' || cancelled) return;
       watchSubRef.current = await Location.watchPositionAsync(
@@ -140,7 +154,10 @@ export default function AttendanceScreen() {
           }
         }
       );
-      if (!cancelled) setAutoWatching(true);
+      if (!cancelled) {
+        setAutoWatchMode('foreground');
+        setAutoWatching(true);
+      }
     })();
 
     return () => {
@@ -275,8 +292,9 @@ export default function AttendanceScreen() {
 
         {autoWatching && timeIn && !timeOut && (
           <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: spacing.md }}>
-            Watching your location -- time out will be marked automatically if you leave the site. Keep the app
-            open for this to work.
+            {autoWatchMode === 'background'
+              ? 'Watching your location -- time out will be marked automatically if you leave the site, even with the app closed or your phone locked.'
+              : 'Watching your location -- time out will be marked automatically if you leave the site. Keep the app open for this to work.'}
           </Text>
         )}
 
