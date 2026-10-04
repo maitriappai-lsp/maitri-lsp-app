@@ -38,7 +38,37 @@ import { API_BASE_URL } from '../config';
 
 export const GEOFENCE_TASK = 'maitri-geofence-task';
 const SESSION_KEY = 'maitri-lsp-session-v1';
+const DEBUG_LOG_KEY = 'maitri-geofence-debug-log';
 const BACKGROUND_EXIT_GRACE_MS = 25 * 1000;
+
+// A release APK has no connected dev machine to watch console output on,
+// so console.log/warn from a background task is otherwise invisible. This
+// writes a short rolling log to AsyncStorage instead, which the Attendance
+// screen can read and display -- the only practical way to see what the
+// background task actually did (or didn't do) on a real device.
+async function logDebug(msg) {
+  try {
+    const raw = await AsyncStorage.getItem(DEBUG_LOG_KEY);
+    const log = raw ? JSON.parse(raw) : [];
+    log.push({ t: new Date().toISOString(), msg });
+    await AsyncStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(log.slice(-25)));
+  } catch (e) {
+    // Logging itself failing isn't worth crashing over.
+  }
+}
+
+export async function getDebugLog() {
+  try {
+    const raw = await AsyncStorage.getItem(DEBUG_LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function clearDebugLog() {
+  await AsyncStorage.removeItem(DEBUG_LOG_KEY).catch(() => {});
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,25 +98,41 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 
 TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
   if (error) {
-    console.warn('Geofence task error', error.message);
+    await logDebug(`task error: ${error.message}`);
     return;
   }
-  const { eventType, region } = data;
+  const { eventType, region } = data || {};
+  await logDebug(
+    `task invoked: eventType=${eventType === Location.GeofencingEventType.Exit ? 'Exit' : eventType === Location.GeofencingEventType.Enter ? 'Enter' : eventType} region=${region?.identifier}`
+  );
   if (eventType !== Location.GeofencingEventType.Exit) return; // entries don't auto time-in; only exits matter here
 
   try {
     const raw = await AsyncStorage.getItem(SESSION_KEY);
-    if (!raw) return;
+    if (!raw) {
+      await logDebug('skipped: no session in storage');
+      return;
+    }
     const { token, user } = JSON.parse(raw);
-    if (!token || !user || user.role !== 'Facilitator') return;
+    if (!token || !user || user.role !== 'Facilitator') {
+      await logDebug(`skipped: session present but not a facilitator (role=${user?.role})`);
+      return;
+    }
 
     const date = todayLocalYMD();
     const openRes = await fetch(`${API_BASE_URL}/api/attendance-open?date=${date}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!openRes.ok) return;
+    if (!openRes.ok) {
+      await logDebug(`skipped: /api/attendance-open returned HTTP ${openRes.status}`);
+      return;
+    }
     const { record } = await openRes.json();
-    if (!record) return; // nothing open -- this exit doesn't matter
+    if (!record) {
+      await logDebug('skipped: no open attendance record for today');
+      return;
+    }
+    await logDebug(`open record found (id=${record.id}) -- waiting ${BACKGROUND_EXIT_GRACE_MS / 1000}s grace period`);
 
     // Short grace period (see file header for why this is much shorter
     // than the foreground version), then re-check: did the exit hold, or
@@ -95,16 +141,28 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null);
     if (pos && typeof region.latitude === 'number' && typeof region.longitude === 'number') {
       const distance = distanceMeters(pos.coords.latitude, pos.coords.longitude, region.latitude, region.longitude);
-      if (distance <= (region.radius || 0)) return; // back inside already -- don't time out
+      await logDebug(`re-checked position: ${Math.round(distance)}m from geofence centre (radius ${region.radius}m)`);
+      if (distance <= (region.radius || 0)) {
+        await logDebug('back inside after grace period -- not timing out');
+        return;
+      }
+    } else {
+      await logDebug('could not get a position for re-check -- proceeding to time out anyway');
     }
 
-    await fetch(`${API_BASE_URL}/api/attendance/${record.id}`, {
+    const timeOut = nowHHMM();
+    const patchRes = await fetch(`${API_BASE_URL}/api/attendance/${record.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ timeOut: nowHHMM() }),
+      body: JSON.stringify({ timeOut }),
     });
+    await logDebug(
+      patchRes.ok
+        ? `timed out successfully at ${timeOut} (record ${record.id})`
+        : `PATCH failed: HTTP ${patchRes.status}`
+    );
   } catch (e) {
-    console.warn('Geofence task failed', e?.message || e);
+    await logDebug(`task threw: ${e?.message || e}`);
   }
 });
 
@@ -115,35 +173,51 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
 // so the caller can fall back to the foreground-only watcher when
 // background permission isn't available.
 export async function registerGeofences(geoList) {
-  const fg = await Location.getForegroundPermissionsAsync();
-  if (fg.status !== 'granted') return { ok: false, reason: 'foreground-permission' };
+  try {
+    const fg = await Location.getForegroundPermissionsAsync();
+    if (fg.status !== 'granted') {
+      await logDebug('registerGeofences: foreground permission not granted');
+      return { ok: false, reason: 'foreground-permission' };
+    }
 
-  // On Android 11+ this can prompt the user to go into Settings and choose
-  // "Allow all the time" -- it will NOT be grantable from a single in-app
-  // dialog the way foreground permission is. First-time callers should
-  // expect this to often come back denied until the user does that
-  // manually, which is why this fails soft rather than erroring.
-  const bg = await Location.requestBackgroundPermissionsAsync();
-  if (bg.status !== 'granted') return { ok: false, reason: 'background-permission' };
+    // On Android 11+ this can prompt the user to go into Settings and
+    // choose "Allow all the time" -- it will NOT be grantable from a
+    // single in-app dialog the way foreground permission is. First-time
+    // callers should expect this to often come back denied until the user
+    // does that manually, which is why this fails soft rather than
+    // erroring.
+    const bg = await Location.requestBackgroundPermissionsAsync();
+    if (bg.status !== 'granted') {
+      await logDebug(`registerGeofences: background permission not granted (status=${bg.status})`);
+      return { ok: false, reason: 'background-permission' };
+    }
 
-  if (!geoList || geoList.length === 0) return { ok: false, reason: 'no-geofences' };
+    if (!geoList || geoList.length === 0) {
+      await logDebug('registerGeofences: no geofences to register');
+      return { ok: false, reason: 'no-geofences' };
+    }
 
-  // iOS caps monitored regions at 20. There's no dynamic "nearest 20"
-  // swapping implemented here -- if there are ever more than 20 geofences,
-  // whichever are past the 20th in this list simply won't be monitored in
-  // the background (the foreground watcher, where active, has no such
-  // limit).
-  const regions = geoList.slice(0, 20).map((g) => ({
-    identifier: g.id,
-    latitude: g.lat,
-    longitude: g.lng,
-    radius: g.radiusMeters || 150,
-    notifyOnEnter: false,
-    notifyOnExit: true,
-  }));
+    // iOS caps monitored regions at 20. There's no dynamic "nearest 20"
+    // swapping implemented here -- if there are ever more than 20
+    // geofences, whichever are past the 20th in this list simply won't be
+    // monitored in the background (the foreground watcher, where active,
+    // has no such limit).
+    const regions = geoList.slice(0, 20).map((g) => ({
+      identifier: g.id,
+      latitude: g.lat,
+      longitude: g.lng,
+      radius: g.radiusMeters || 150,
+      notifyOnEnter: false,
+      notifyOnExit: true,
+    }));
 
-  await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
-  return { ok: true, count: regions.length, truncated: geoList.length > 20 };
+    await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
+    await logDebug(`registerGeofences: registered ${regions.length} region(s) successfully`);
+    return { ok: true, count: regions.length, truncated: geoList.length > 20 };
+  } catch (e) {
+    await logDebug(`registerGeofences threw: ${e?.message || e}`);
+    return { ok: false, reason: 'exception', message: e?.message || String(e) };
+  }
 }
 
 export async function unregisterGeofences() {

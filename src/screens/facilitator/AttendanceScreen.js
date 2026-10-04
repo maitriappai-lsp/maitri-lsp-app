@@ -45,12 +45,12 @@
 // all for a day with no attendance record, so PSR can't exist without a
 // real check-in behind it.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, Text, View, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, Text, View, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
-import { registerGeofences } from '../../background/geofenceTask';
+import { registerGeofences, getDebugLog, clearDebugLog } from '../../background/geofenceTask';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
@@ -83,6 +83,13 @@ export default function AttendanceScreen() {
   const [resumedOpenSession, setResumedOpenSession] = useState(false);
   const [autoWatching, setAutoWatching] = useState(false);
   const [autoWatchMode, setAutoWatchMode] = useState(null); // 'background' | 'foreground' | null
+  const [autoWatchFailReason, setAutoWatchFailReason] = useState(null);
+  const [debugLog, setDebugLog] = useState([]);
+  const [showDebugLog, setShowDebugLog] = useState(false);
+
+  async function refreshDebugLog() {
+    setDebugLog(await getDebugLog());
+  }
 
   const beneficiary = beneficiaryId ? getBeneficiary(beneficiaryId) : null;
   const isScheduled = beneficiary
@@ -130,6 +137,7 @@ export default function AttendanceScreen() {
         setAutoWatching(true);
         return;
       }
+      setAutoWatchFailReason(bgResult.reason + (bgResult.message ? `: ${bgResult.message}` : ''));
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted' || cancelled) return;
@@ -291,11 +299,61 @@ export default function AttendanceScreen() {
         </Text>
 
         {autoWatching && timeIn && !timeOut && (
-          <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: spacing.md }}>
+          <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: spacing.sm }}>
             {autoWatchMode === 'background'
               ? 'Watching your location -- time out will be marked automatically if you leave the site, even with the app closed or your phone locked.'
               : 'Watching your location -- time out will be marked automatically if you leave the site. Keep the app open for this to work.'}
           </Text>
+        )}
+        {autoWatchFailReason && (
+          <Text style={{ color: colors.amber, fontSize: 11, marginBottom: spacing.sm }}>
+            Background auto time-out isn't active ({autoWatchFailReason}) -- using foreground-only watching instead.
+          </Text>
+        )}
+
+        <TouchableOpacity
+          onPress={() => {
+            const next = !showDebugLog;
+            setShowDebugLog(next);
+            if (next) refreshDebugLog();
+          }}
+          style={{ marginBottom: spacing.md }}
+        >
+          <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>
+            {showDebugLog ? '\u25be' : '\u25b8'} Background activity log (debug)
+          </Text>
+        </TouchableOpacity>
+        {showDebugLog && (
+          <Card style={{ marginBottom: spacing.md }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+              <TouchableOpacity onPress={refreshDebugLog}>
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>Refresh</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  await clearDebugLog();
+                  refreshDebugLog();
+                }}
+              >
+                <Text style={{ color: colors.red, fontSize: 12, fontWeight: '700' }}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            {debugLog.length === 0 ? (
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                No background activity recorded yet. This fills in as the background task actually runs --
+                entering/leaving a geofence with background permission granted.
+              </Text>
+            ) : (
+              debugLog
+                .slice()
+                .reverse()
+                .map((entry, i) => (
+                  <Text key={i} style={{ color: colors.text, fontSize: 11, marginBottom: 4 }}>
+                    {new Date(entry.t).toLocaleTimeString()} -- {entry.msg}
+                  </Text>
+                ))
+            )}
+          </Card>
         )}
 
         {resumedOpenSession && (
