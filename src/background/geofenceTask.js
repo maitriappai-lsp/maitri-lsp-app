@@ -174,7 +174,12 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
 // background permission isn't available.
 export async function registerGeofences(geoList) {
   try {
-    const fg = await Location.getForegroundPermissionsAsync();
+    // Actively request (not just check) -- this runs in parallel with the
+    // Attendance screen's own location check-in, which is what actually
+    // triggers the OS permission dialog. A passive check here could run
+    // and fail before that dialog is even answered; requesting instead
+    // waits for the real outcome (and is a no-op if already granted).
+    const fg = await Location.requestForegroundPermissionsAsync();
     if (fg.status !== 'granted') {
       await logDebug('registerGeofences: foreground permission not granted');
       return { ok: false, reason: 'foreground-permission' };
