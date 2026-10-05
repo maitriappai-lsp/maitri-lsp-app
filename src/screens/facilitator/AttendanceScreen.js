@@ -124,21 +124,18 @@ export default function AttendanceScreen() {
       checkLocation();
     }
 
+    // Start the foreground watcher right away as the working baseline --
+    // it doesn't need db.geo to have loaded yet in the same sense
+    // (findGeofenceMatch just sees an empty list until it has), and it
+    // gives auto time-out a chance to work immediately rather than
+    // waiting on background registration (see the separate effect below)
+    // to finish first. This is also deliberately NOT racing against
+    // checkLocation()'s own permission request above -- it requests
+    // foreground permission itself, but two concurrent requests for the
+    // *same* permission are a much safer race than foreground vs.
+    // background permission prompts were.
     let cancelled = false;
     (async () => {
-      // Prefer true background geofencing -- it keeps working with the
-      // phone locked or the app closed. Only fall back to the foreground-
-      // only watcher (which stops the moment the screen isn't active) when
-      // background permission isn't available.
-      const bgResult = await registerGeofences(db.geo);
-      if (cancelled) return;
-      if (bgResult.ok) {
-        setAutoWatchMode('background');
-        setAutoWatching(true);
-        return;
-      }
-      setAutoWatchFailReason(bgResult.reason + (bgResult.message ? `: ${bgResult.message}` : ''));
-
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted' || cancelled) return;
       watchSubRef.current = await Location.watchPositionAsync(
@@ -163,7 +160,7 @@ export default function AttendanceScreen() {
         }
       );
       if (!cancelled) {
-        setAutoWatchMode('foreground');
+        setAutoWatchMode((mode) => mode || 'foreground'); // don't downgrade if background already won
         setAutoWatching(true);
       }
     })();
@@ -179,6 +176,51 @@ export default function AttendanceScreen() {
     // and the watch subscription reads current state via stateRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
+
+  // Background geofence registration runs as its own effect, separate
+  // from the mount effect above, specifically so it isn't attempted before
+  // db.geo has actually loaded from the server (it starts out empty right
+  // after login) -- registering with an empty list used to fail
+  // permanently with "no-geofences" the moment this ran too early, with no
+  // retry once the real data arrived. Re-runs if db.geo's length changes
+  // (e.g. it loads a moment after mount) and stops once it has already
+  // succeeded once (tracked via autoWatchMode, not re-registered on every
+  // background poll/refresh).
+  useEffect(() => {
+    if (!currentUser || autoWatchMode === 'background') return;
+    if (!db.geo || db.geo.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      // A short delay before requesting background permission, on top of
+      // waiting for db.geo to load, to further avoid racing the
+      // foreground permission dialog that checkLocation() and the
+      // foreground-watcher effect above may still be resolving right
+      // after this screen opens.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (cancelled) return;
+
+      const bgResult = await registerGeofences(db.geo);
+      if (cancelled) return;
+      if (bgResult.ok) {
+        setAutoWatchMode('background');
+        setAutoWatchFailReason(null);
+        setAutoWatching(true);
+        // Background now covers exit detection -- the foreground watcher
+        // running alongside it would just be redundant.
+        if (watchSubRef.current) {
+          watchSubRef.current.remove();
+          watchSubRef.current = null;
+        }
+      } else {
+        setAutoWatchFailReason(bgResult.reason + (bgResult.message ? `: ${bgResult.message}` : ''));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, db.geo.length, autoWatchMode]);
 
   function resetSession() {
     setGeoMatch(null);
