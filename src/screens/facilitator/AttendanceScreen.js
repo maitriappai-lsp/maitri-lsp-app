@@ -50,7 +50,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
-import { registerGeofences, getDebugLog, clearDebugLog } from '../../background/geofenceTask';
+import { registerGeofences, getDebugLog, clearDebugLog, isGeofencingTaskRegistered } from '../../background/geofenceTask';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
@@ -368,6 +368,14 @@ export default function AttendanceScreen() {
         {showDebugLog && (
           <Card style={{ marginBottom: spacing.md }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+              <TouchableOpacity
+                onPress={async () => {
+                  await isGeofencingTaskRegistered();
+                  refreshDebugLog();
+                }}
+              >
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>Check registration now</Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={refreshDebugLog}>
                 <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>Refresh</Text>
               </TouchableOpacity>

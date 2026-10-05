@@ -218,11 +218,30 @@ export async function registerGeofences(geoList) {
 
     await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
     await logDebug(`registerGeofences: registered ${regions.length} region(s) successfully`);
+    // Log exactly what was registered -- lets you cross-check against the
+    // real-world location (e.g. in Google Maps) that the radius genuinely
+    // covers where you stood, and catches any stale/wrong coordinates.
+    for (const r of regions) {
+      await logDebug(`  region ${r.identifier}: lat=${r.latitude}, lng=${r.longitude}, radius=${r.radius}m`);
+    }
+    const stillRegistered = await TaskManager.isTaskRegisteredAsync(GEOFENCE_TASK);
+    await logDebug(`post-registration check: task registered with OS = ${stillRegistered}`);
     return { ok: true, count: regions.length, truncated: geoList.length > 20 };
   } catch (e) {
     await logDebug(`registerGeofences threw: ${e?.message || e}`);
     return { ok: false, reason: 'exception', message: e?.message || String(e) };
   }
+}
+
+// On-demand check, independent of registerGeofences -- some phones' OEM
+// battery management has been known to silently drop a registered
+// background task over time without the app being told. Calling this
+// right after a real-world test (rather than only at registration time)
+// shows whether the registration actually survived the whole wait.
+export async function isGeofencingTaskRegistered() {
+  const registered = await TaskManager.isTaskRegisteredAsync(GEOFENCE_TASK);
+  await logDebug(`on-demand check: task registered with OS = ${registered}`);
+  return registered;
 }
 
 export async function unregisterGeofences() {
