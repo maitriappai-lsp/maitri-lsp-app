@@ -23,10 +23,13 @@
 //   a real-device, OEM-dependent risk that no amount of correct code
 //   eliminates outright -- testing on the actual phones your team uses is
 //   the only way to know it holds up.
-// - A background task has no guaranteed execution budget. The grace period
-//   below (BACKGROUND_EXIT_GRACE_MS) is intentionally much shorter than the
-//   foreground watcher's 90s for exactly this reason: a long artificial
-//   delay risks the OS suspending the task before it finishes.
+// - A background task has no guaranteed execution budget. An earlier
+//   version of this file waited ~25s before finalizing (mirroring the
+//   foreground watcher's grace period) -- real-device testing showed the
+//   OS can suspend the task mid-wait before it ever gets there, so there
+//   is now NO artificial delay here at all; it acts immediately on a
+//   confirmed exit and leans on Android's own geofencing dwell/confidence
+//   logic as the only debounce.
 // - Geofencing delivers discrete Enter/Exit transitions, not a continuous
 //   stream of positions -- there is no background equivalent of "poll every
 //   15 seconds" the way the foreground watcher works.
@@ -39,7 +42,6 @@ import { API_BASE_URL } from '../config';
 export const GEOFENCE_TASK = 'maitri-geofence-task';
 const SESSION_KEY = 'maitri-lsp-session-v1';
 const DEBUG_LOG_KEY = 'maitri-geofence-debug-log';
-const BACKGROUND_EXIT_GRACE_MS = 25 * 1000;
 
 // A release APK has no connected dev machine to watch console output on,
 // so console.log/warn from a background task is otherwise invisible. This
@@ -70,10 +72,6 @@ export async function clearDebugLog() {
   await AsyncStorage.removeItem(DEBUG_LOG_KEY).catch(() => {});
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function todayLocalYMD() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -85,15 +83,6 @@ function todayLocalYMD() {
 function nowHHMM() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function distanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
@@ -132,24 +121,22 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
       await logDebug('skipped: no open attendance record for today');
       return;
     }
-    await logDebug(`open record found (id=${record.id}) -- waiting ${BACKGROUND_EXIT_GRACE_MS / 1000}s grace period`);
-
-    // Short grace period (see file header for why this is much shorter
-    // than the foreground version), then re-check: did the exit hold, or
-    // was it a momentary GPS blip?
-    await sleep(BACKGROUND_EXIT_GRACE_MS);
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null);
-    if (pos && typeof region.latitude === 'number' && typeof region.longitude === 'number') {
-      const distance = distanceMeters(pos.coords.latitude, pos.coords.longitude, region.latitude, region.longitude);
-      await logDebug(`re-checked position: ${Math.round(distance)}m from geofence centre (radius ${region.radius}m)`);
-      if (distance <= (region.radius || 0)) {
-        await logDebug('back inside after grace period -- not timing out');
-        return;
-      }
-    } else {
-      await logDebug('could not get a position for re-check -- proceeding to time out anyway');
+    if (record.checkedInGeoId && region.identifier !== record.checkedInGeoId) {
+      await logDebug(
+        `skipped: exit was from ${region.identifier}, but this check-in belongs to ${record.checkedInGeoId} -- unrelated geofence`
+      );
+      return;
     }
+    await logDebug(`open record found (id=${record.id}) -- finalizing time out now (no artificial delay -- see file header)`);
 
+    // No sleep/re-check here on purpose: real-device testing showed a
+    // background task can be suspended by the OS mid-wait, before it ever
+    // reaches the network calls, if asked to sit through an artificial
+    // delay first. Android's geofencing already has its own internal
+    // dwell/confidence thresholds before it fires an Exit at all (part of
+    // why it can take a while to trigger), so leaning on that instead of
+    // adding a second layer of debounce here trades a little jitter
+    // protection for the task actually completing.
     const timeOut = nowHHMM();
     const patchRes = await fetch(`${API_BASE_URL}/api/attendance/${record.id}`, {
       method: 'PATCH',
