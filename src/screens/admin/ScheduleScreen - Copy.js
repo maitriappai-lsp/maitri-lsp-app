@@ -2,22 +2,8 @@
 // Step 1 generates dates from a recurrence rule (Monthly = every 4 weeks,
 // per the spec's confirmed decision). Step 2 assigns a category to each
 // generated date individually, since category can vary session to session.
-//
-// Layout: the annual schedule list comes first, with a round "+" button at
-// the top right. Tapping "+" opens the two-step builder in a popup.
-// Row actions (edit / delete) are compact icons.
 import React, { useState } from 'react';
-import {
-  ScrollView,
-  Text,
-  View,
-  Alert,
-  TouchableOpacity,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
@@ -47,109 +33,6 @@ function generateDates(startDate, endDate, dayOfWeek, frequency) {
   return dates;
 }
 
-// Round "+" button shown at the top-right of the list.
-function AddButton({ onPress, label }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-        shadowOffset: { width: 0, height: 2 },
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '600' }}>+</Text>
-    </TouchableOpacity>
-  );
-}
-
-// Small tappable icon used in each record row (edit / delete).
-function IconButton({ name, color, label, onPress }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-      style={{ padding: 6 }}
-    >
-      <Ionicons name={name} size={22} color={color} />
-    </TouchableOpacity>
-  );
-}
-
-// Row above the list: "Annual schedule (12)" on the left, "+" on the right.
-function ListHeader({ title, count, onAdd, addLabel }) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: spacing.md,
-      }}
-    >
-      <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
-        {title} ({count})
-      </Text>
-      <AddButton onPress={onAdd} label={addLabel} />
-    </View>
-  );
-}
-
-// Bottom-sheet popup that holds the "Add sessions" builder.
-function AddModal({ visible, title, onClose, children }) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        enabled={Platform.OS === 'ios'}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
-          <View
-            style={{
-              backgroundColor: colors.bg,
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              padding: spacing.lg,
-              maxHeight: '90%',
-            }}
-          >
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: spacing.md,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{title}</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '700' }}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              {children}
-              <View style={{ height: spacing.xl }} />
-            </ScrollView>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
 export default function ScheduleScreen() {
   const { db, addRecord, deleteRecord, updateRecord, nextIds, refresh } = useData();
 
@@ -163,20 +46,11 @@ export default function ScheduleScreen() {
   const [endDate, setEndDate] = useState('2026-12-11');
   const [time, setTime] = useState('10:00');
 
-  const [showAdd, setShowAdd] = useState(false);
   const [step, setStep] = useState(1);
   const [generatedDates, setGeneratedDates] = useState([]);
   const [categoryBySession, setCategoryBySession] = useState({});
 
   const facilitators = db.resources.filter((r) => r.role === 'Facilitator');
-
-  // Closes the popup and returns the builder to step 1 for next time.
-  function closeAdd() {
-    setShowAdd(false);
-    setStep(1);
-    setGeneratedDates([]);
-    setCategoryBySession({});
-  }
 
   function handleGenerate() {
     const dates = generateDates(startDate, endDate, dayOfWeek, frequency);
@@ -203,12 +77,10 @@ export default function ScheduleScreen() {
         categoryId: categoryBySession[date],
       });
     });
-    Alert.alert(
-      'Schedule saved',
-      `${generatedDates.length} session(s) added to the calendar.`,
-      [{ text: 'OK', onPress: closeAdd }],
-      { cancelable: false }
-    );
+    Alert.alert('Schedule saved', `${generatedDates.length} session(s) added to the calendar.`);
+    setStep(1);
+    setGeneratedDates([]);
+    setCategoryBySession({});
   }
 
   // ---- Edit an existing scheduled session --------------------------------
@@ -293,73 +165,61 @@ export default function ScheduleScreen() {
           Schedule
         </Text>
 
-        <ListHeader
-          title="Annual schedule"
-          count={db.schedule.length}
-          onAdd={() => setShowAdd(true)}
-          addLabel="Add sessions"
-        />
-
-        <AddModal
-          visible={showAdd}
-          title={step === 1 ? 'Add sessions (step 1 of 2)' : 'Add sessions (step 2 of 2)'}
-          onClose={closeAdd}
-        >
-          {step === 1 && (
-            <View>
-              <SectionLabel>Step 1 -- define the recurrence</SectionLabel>
-              <SectionLabel>Beneficiary</SectionLabel>
-              <Select
-                value={beneficiaryId}
-                onSelect={setBeneficiaryId}
-                options={db.beneficiaries.map((b) => ({ value: b.id, label: `${b.school} - ${b.class}` }))}
-              />
-              <SectionLabel>Facilitator</SectionLabel>
-              <Select
-                value={facilitatorId}
-                onSelect={setFacilitatorId}
-                options={facilitators.map((f) => ({ value: f.id, label: f.name }))}
-              />
-              <SectionLabel>Frequency</SectionLabel>
-              <Select
-                value={frequency}
-                onSelect={setFrequency}
-                options={FREQUENCIES.map((f) => ({ value: f, label: f === 'Monthly' ? 'Monthly (every 4 weeks)' : f }))}
-              />
-              <SectionLabel>Day of week</SectionLabel>
-              <Select value={dayOfWeek} onSelect={setDayOfWeek} options={DAYS.map((d) => ({ value: d, label: d }))} />
-              <View style={{ flexDirection: 'row', gap: spacing.md }}>
-                <View style={{ flex: 1 }}>
-                  <DateField label="Start date" value={startDate} onChange={setStartDate} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <DateField label="End date" value={endDate} onChange={setEndDate} />
-                </View>
+        {step === 1 && (
+          <Card>
+            <SectionLabel>Step 1 -- define the recurrence</SectionLabel>
+            <SectionLabel>Beneficiary</SectionLabel>
+            <Select
+              value={beneficiaryId}
+              onSelect={setBeneficiaryId}
+              options={db.beneficiaries.map((b) => ({ value: b.id, label: `${b.school} - ${b.class}` }))}
+            />
+            <SectionLabel>Facilitator</SectionLabel>
+            <Select
+              value={facilitatorId}
+              onSelect={setFacilitatorId}
+              options={facilitators.map((f) => ({ value: f.id, label: f.name }))}
+            />
+            <SectionLabel>Frequency</SectionLabel>
+            <Select
+              value={frequency}
+              onSelect={setFrequency}
+              options={FREQUENCIES.map((f) => ({ value: f, label: f === 'Monthly' ? 'Monthly (every 4 weeks)' : f }))}
+            />
+            <SectionLabel>Day of week</SectionLabel>
+            <Select value={dayOfWeek} onSelect={setDayOfWeek} options={DAYS.map((d) => ({ value: d, label: d }))} />
+            <View style={{ flexDirection: 'row', gap: spacing.md }}>
+              <View style={{ flex: 1 }}>
+                <DateField label="Start date" value={startDate} onChange={setStartDate} />
               </View>
-              <TimeField label="Time" value={time} onChange={setTime} />
-              <PrimaryButton title="Generate dates" onPress={handleGenerate} />
+              <View style={{ flex: 1 }}>
+                <DateField label="End date" value={endDate} onChange={setEndDate} />
+              </View>
             </View>
-          )}
+            <TimeField label="Time" value={time} onChange={setTime} />
+            <PrimaryButton title="Generate dates" onPress={handleGenerate} />
+          </Card>
+        )}
 
-          {step === 2 && (
-            <View>
-              <SectionLabel>Step 2 -- assign category per session ({generatedDates.length} dates)</SectionLabel>
-              {generatedDates.map((date) => (
-                <View key={date} style={{ marginBottom: spacing.md }}>
-                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>{date}</Text>
-                  <Select
-                    value={categoryBySession[date]}
-                    onSelect={(v) => setCategoryBySession((prev) => ({ ...prev, [date]: v }))}
-                    options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
-                  />
-                </View>
-              ))}
-              <PrimaryButton title="Confirm & save all" onPress={confirmAndSaveAll} />
-              <SecondaryButton title="Back" onPress={() => setStep(1)} style={{ marginTop: spacing.sm }} />
-            </View>
-          )}
-        </AddModal>
+        {step === 2 && (
+          <Card>
+            <SectionLabel>Step 2 -- assign category per session ({generatedDates.length} dates)</SectionLabel>
+            {generatedDates.map((date) => (
+              <View key={date} style={{ marginBottom: spacing.md }}>
+                <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>{date}</Text>
+                <Select
+                  value={categoryBySession[date]}
+                  onSelect={(v) => setCategoryBySession((prev) => ({ ...prev, [date]: v }))}
+                  options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
+                />
+              </View>
+            ))}
+            <PrimaryButton title="Confirm & save all" onPress={confirmAndSaveAll} />
+            <SecondaryButton title="Back" onPress={() => setStep(1)} style={{ marginTop: spacing.sm }} />
+          </Card>
+        )}
 
+        <SectionLabel>Annual schedule</SectionLabel>
         {db.schedule
           .slice()
           .sort((a, b) => a.date.localeCompare(b.date))
@@ -412,7 +272,7 @@ export default function ScheduleScreen() {
             return (
               <Card key={s.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <View style={{ flex: 1, marginRight: spacing.sm }}>
+                  <View style={{ flex: 1, marginRight: spacing.md }}>
                     <Text style={{ fontWeight: '700', color: colors.text }}>{b?.school}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                       {s.date} - {s.time} - {f?.name} assigned
@@ -423,19 +283,20 @@ export default function ScheduleScreen() {
                       </Text>
                     )}
                   </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                    <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(s)} />
-                    <IconButton
-                      name="trash-outline"
-                      color={colors.red}
-                      label="Delete"
+                  <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                    <TouchableOpacity onPress={() => startEdit(s)}>
+                      <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       onPress={() =>
                         Alert.alert('Delete session', `Remove ${b?.school} on ${s.date}?`, [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('schedule', s.id) },
                         ])
                       }
-                    />
+                    >
+                      <Text style={{ color: colors.red, fontWeight: '700' }}>Delete</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </Card>

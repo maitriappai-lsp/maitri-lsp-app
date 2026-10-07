@@ -4,8 +4,23 @@
 // bytes to the backend's /api/files (Cloudflare R2 when configured, local
 // disk otherwise -- see backend/src/routes/files.js), then records the
 // metadata with the returned storagePath and openable fileUrl.
+//
+// Layout: the published list comes first, with a round "+" button at the top
+// right. Tapping "+" opens the upload form in a popup. Row actions
+// (view / remove) are compact icons.
 import React, { useState } from 'react';
-import { ScrollView, Text, View, Alert, TouchableOpacity, Linking } from 'react-native';
+import {
+  ScrollView,
+  Text,
+  View,
+  Alert,
+  TouchableOpacity,
+  Linking,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
@@ -28,12 +43,121 @@ function detectFileType(fileName) {
   return 'Other';
 }
 
+// Round "+" button shown at the top-right of the list.
+function AddButton({ onPress, label }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '600' }}>+</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Small tappable icon used in each record row (view / remove).
+function IconButton({ name, color, label, onPress }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={{ padding: 6 }}
+    >
+      <Ionicons name={name} size={22} color={color} />
+    </TouchableOpacity>
+  );
+}
+
+// Row above the list: "Published (8)" on the left, "+" on the right.
+function ListHeader({ title, count, onAdd, addLabel }) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.md,
+      }}
+    >
+      <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
+        {title} ({count})
+      </Text>
+      <AddButton onPress={onAdd} label={addLabel} />
+    </View>
+  );
+}
+
+// Bottom-sheet popup that holds the upload form.
+function AddModal({ visible, title, onClose, children }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        enabled={Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+          <View
+            style={{
+              backgroundColor: colors.bg,
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              padding: spacing.lg,
+              maxHeight: '90%',
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: spacing.md,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{title}</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {children}
+              <View style={{ height: spacing.xl }} />
+            </ScrollView>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 export default function ContentAdminScreen() {
   const { currentUser } = useAuth();
   const { db, addRecord, deleteRecord, nextId } = useData();
   const [categoryId, setCategoryId] = useState(db.categories[0]?.id);
   const [picked, setPicked] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+
+  function closeAdd() {
+    setShowAdd(false);
+    setPicked(null);
+  }
 
   async function pickFile() {
     const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
@@ -63,7 +187,7 @@ export default function ContentAdminScreen() {
         storagePath,
         fileUrl: url,
       });
-      setPicked(null);
+      closeAdd();
     } catch (e) {
       Alert.alert('Publish failed', e.message || 'Please try again.');
     } finally {
@@ -74,52 +198,63 @@ export default function ContentAdminScreen() {
   return (
     <Screen>
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.md }}>
-        Upload session content
+        Session content
       </Text>
-      <Card>
-        <SectionLabel>Service category</SectionLabel>
-        <Select
-          value={categoryId}
-          onSelect={setCategoryId}
-          options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
-        />
-        <SecondaryButton
-          title={picked ? `Selected: ${picked.name}` : 'Choose a file (any type)'}
-          onPress={pickFile}
-          style={{ marginBottom: spacing.md }}
-        />
-        <PrimaryButton title={publishing ? 'Publishing…' : 'Publish content'} onPress={publish} disabled={!picked || publishing} />
-      </Card>
 
-      <SectionLabel>Published</SectionLabel>
       <ScrollView showsVerticalScrollIndicator={false}>
+        <ListHeader
+          title="Published"
+          count={db.content.length}
+          onAdd={() => setShowAdd(true)}
+          addLabel="Upload content"
+        />
+
+        <AddModal visible={showAdd} title="Upload session content" onClose={closeAdd}>
+          <SectionLabel>Service category</SectionLabel>
+          <Select
+            value={categoryId}
+            onSelect={setCategoryId}
+            options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
+          />
+          <SecondaryButton
+            title={picked ? `Selected: ${picked.name}` : 'Choose a file (any type)'}
+            onPress={pickFile}
+            style={{ marginBottom: spacing.md }}
+          />
+          <PrimaryButton title={publishing ? 'Publishing…' : 'Publish content'} onPress={publish} disabled={!picked || publishing} />
+        </AddModal>
+
         {db.content.map((c) => {
           const cat = db.categories.find((x) => x.id === c.categoryId);
           return (
             <Card key={c.id}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <View style={{ flex: 1, paddingRight: spacing.md }}>
+                <View style={{ flex: 1, paddingRight: spacing.sm }}>
                   <Text style={{ fontWeight: '700', color: colors.text }}>{c.title}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                     {cat?.pillar} - {c.fileType} - {c.date}
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   {c.fileUrl && (
-                    <TouchableOpacity onPress={() => Linking.openURL(c.fileUrl)}>
-                      <Text style={{ color: colors.primary, fontWeight: '700' }}>View</Text>
-                    </TouchableOpacity>
+                    <IconButton
+                      name="open-outline"
+                      color={colors.primary}
+                      label="View"
+                      onPress={() => Linking.openURL(c.fileUrl)}
+                    />
                   )}
-                  <TouchableOpacity
+                  <IconButton
+                    name="trash-outline"
+                    color={colors.red}
+                    label="Remove"
                     onPress={() =>
                       Alert.alert('Remove content', `Unpublish ${c.title}?`, [
                         { text: 'Cancel', style: 'cancel' },
                         { text: 'Remove', style: 'destructive', onPress: () => deleteRecord('content', c.id) },
                       ])
                     }
-                  >
-                    <Text style={{ color: colors.red, fontWeight: '700' }}>Remove</Text>
-                  </TouchableOpacity>
+                  />
                 </View>
               </View>
             </Card>

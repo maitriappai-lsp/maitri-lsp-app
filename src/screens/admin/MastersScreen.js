@@ -5,6 +5,7 @@
 //
 // Layout: each tab shows its list of records first, with a round "+" button
 // at the top right. Tapping "+" opens the Add form in a bottom-sheet popup.
+// Row actions (edit / deactivate / delete) are compact icons.
 import React, { useState } from 'react';
 import {
   ScrollView,
@@ -16,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import { useData } from '../../data/store';
@@ -69,6 +71,21 @@ function AddButton({ onPress, label }) {
       }}
     >
       <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '600' }}>+</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Small tappable icon used in each record row (edit / deactivate / delete).
+function IconButton({ name, color, label, onPress }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={{ padding: 6 }}
+    >
+      <Ionicons name={name} size={22} color={color} />
     </TouchableOpacity>
   );
 }
@@ -389,7 +406,7 @@ function ResourcesTab() {
         ) : (
           <Card key={r.id} style={!isActive ? { opacity: 0.6 } : undefined}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                   <Text style={{ fontWeight: '700', color: colors.text }}>{r.name}</Text>
                   {!isActive && (
@@ -403,25 +420,25 @@ function ResourcesTab() {
                   Contract: {r.contractStart || '—'} to {r.contractEnd || 'open-ended'}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                <TouchableOpacity onPress={() => startEdit(r)}>
-                  <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => toggleActive(r)}>
-                  <Text style={{ color: isActive ? colors.amber : colors.green, fontWeight: '700', marginLeft: spacing.sm }}>
-                    {isActive ? 'Deactivate' : 'Reactivate'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(r)} />
+                <IconButton
+                  name={isActive ? 'pause-circle-outline' : 'play-circle-outline'}
+                  color={isActive ? colors.amber : colors.green}
+                  label={isActive ? 'Deactivate' : 'Reactivate'}
+                  onPress={() => toggleActive(r)}
+                />
+                <IconButton
+                  name="trash-outline"
+                  color={colors.red}
+                  label="Delete"
                   onPress={() =>
                     Alert.alert('Delete resource', `Remove ${r.name}?`, [
                       { text: 'Cancel', style: 'cancel' },
                       { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('resources', r.id) },
                     ])
                   }
-                >
-                  <Text style={{ color: colors.red, fontWeight: '700', marginLeft: spacing.sm }}>Delete</Text>
-                </TouchableOpacity>
+                />
               </View>
             </View>
           </Card>
@@ -574,7 +591,7 @@ function BeneficiariesTab() {
         ) : (
           <Card key={b.id}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
                 <Text style={{ fontWeight: '700', color: colors.text }}>{b.school}</Text>
                 <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                   {b.id} - {b.class} {b.section}
@@ -583,20 +600,19 @@ function BeneficiariesTab() {
                   Geofence: {g ? `${g.school}${g.label ? ' - ' + g.label : ''}` : 'not linked'}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                <TouchableOpacity onPress={() => startEdit(b)}>
-                  <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(b)} />
+                <IconButton
+                  name="trash-outline"
+                  color={colors.red}
+                  label="Delete"
                   onPress={() =>
                     Alert.alert('Delete beneficiary', `Remove ${b.school} ${b.class}?`, [
                       { text: 'Cancel', style: 'cancel' },
                       { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('beneficiaries', b.id) },
                     ])
                   }
-                >
-                  <Text style={{ color: colors.red, fontWeight: '700', marginLeft: spacing.sm }}>Delete</Text>
-                </TouchableOpacity>
+                />
               </View>
             </View>
           </Card>
@@ -703,26 +719,25 @@ function CategoriesTab() {
         ) : (
           <Card key={c.id}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
                 <Text style={{ fontWeight: '700', color: colors.text }}>{c.pillar}</Text>
                 <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                   {c.id} - {c.topic} / {c.subtopic}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                <TouchableOpacity onPress={() => startEdit(c)}>
-                  <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(c)} />
+                <IconButton
+                  name="trash-outline"
+                  color={colors.red}
+                  label="Delete"
                   onPress={() =>
                     Alert.alert('Delete category', `Remove ${c.pillar}?`, [
                       { text: 'Cancel', style: 'cancel' },
                       { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('categories', c.id) },
                     ])
                   }
-                >
-                  <Text style={{ color: colors.red, fontWeight: '700', marginLeft: spacing.sm }}>Delete</Text>
-                </TouchableOpacity>
+                />
               </View>
             </View>
           </Card>
@@ -769,7 +784,7 @@ function GeoTab() {
     }
   }
 
-  // Note: the Add-geofence form now opens in a popup. Tapping "+" fills in the
+  // Note: the Add-geofence form opens in a popup. Tapping "+" fills in the
   // device's current location automatically (see onAdd below), so adding a
   // geofence from the actual site still needs no manual coordinate entry.
 
@@ -894,7 +909,7 @@ function GeoTab() {
         ) : (
           <Card key={g.id}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
                 <Text style={{ fontWeight: '700', color: colors.text }}>
                   {g.school}{g.label ? ` -- ${g.label}` : ''}
                 </Text>
@@ -902,20 +917,19 @@ function GeoTab() {
                   {g.lat.toFixed(4)}, {g.lng.toFixed(4)} - {g.radiusMeters}m
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                <TouchableOpacity onPress={() => startEdit(g)}>
-                  <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(g)} />
+                <IconButton
+                  name="trash-outline"
+                  color={colors.red}
+                  label="Delete"
                   onPress={() =>
                     Alert.alert('Delete geofence', `Remove ${g.school}${g.label ? ` (${g.label})` : ''}?`, [
                       { text: 'Cancel', style: 'cancel' },
                       { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('geo', g.id) },
                     ])
                   }
-                >
-                  <Text style={{ color: colors.red, fontWeight: '700', marginLeft: spacing.sm }}>Delete</Text>
-                </TouchableOpacity>
+                />
               </View>
             </View>
           </Card>
