@@ -2,20 +2,8 @@
 // Full Add/Edit/Delete on each, plus an "Import from Excel" stub (real
 // version parses an .xlsx with exceljs/SheetJS server-side and upserts by
 // code, per Section 6 -- picking a file here just simulates that).
-//
-// Layout: each tab shows its list of records first, with a round "+" button
-// at the top right. Tapping "+" opens the Add form in a bottom-sheet popup.
-import React, { useState } from 'react';
-import {
-  ScrollView,
-  Text,
-  View,
-  Alert,
-  TouchableOpacity,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import { useData } from '../../data/store';
@@ -44,94 +32,6 @@ export default function MastersScreen() {
       {tab === 'Beneficiaries' && <BeneficiariesTab />}
       {tab === 'Life Skills' && <CategoriesTab />}
     </Screen>
-  );
-}
-
-// Round "+" button shown at the top-right of each master's list.
-function AddButton({ onPress, label }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 3,
-        shadowOffset: { width: 0, height: 2 },
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '600' }}>+</Text>
-    </TouchableOpacity>
-  );
-}
-
-// Row above each list: "Resources (5)" on the left, "+" on the right.
-function ListHeader({ title, count, onAdd, addLabel }) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: spacing.md,
-      }}
-    >
-      <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
-        {title} ({count})
-      </Text>
-      <AddButton onPress={onAdd} label={addLabel} />
-    </View>
-  );
-}
-
-// Bottom-sheet popup that holds an "Add ..." form.
-function AddModal({ visible, title, onClose, children }) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        enabled={Platform.OS === 'ios'}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
-          <View
-            style={{
-              backgroundColor: colors.bg,
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              padding: spacing.lg,
-              maxHeight: '90%',
-            }}
-          >
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: spacing.md,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{title}</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '700' }}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              {children}
-              <View style={{ height: spacing.xl }} />
-            </ScrollView>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
   );
 }
 
@@ -191,7 +91,6 @@ function ResourcesTab() {
   const [contractStart, setContractStart] = useState('');
   const [contractEnd, setContractEnd] = useState('');
   const [saving, setSaving] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
@@ -230,11 +129,7 @@ function ResourcesTab() {
         password: 'changeme123',
         mustChangePassword: true,
       });
-      Alert.alert(
-        'Saved',
-        `${name} added. Default password is changeme123 (they'll be asked to change it on first login).`,
-        [{ text: 'OK', onPress: () => setShowAdd(false) }]
-      );
+      Alert.alert('Saved', `${name} added. Default password is changeme123 (they'll be asked to change it on first login).`);
       setName('');
       setPhone('');
       setContractStart('');
@@ -313,14 +208,8 @@ function ResourcesTab() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
-      <ListHeader
-        title="Resources"
-        count={db.resources.length}
-        onAdd={() => setShowAdd(true)}
-        addLabel="Add resource"
-      />
-
-      <AddModal visible={showAdd} title="Add resource" onClose={() => setShowAdd(false)}>
+      <Card>
+        <SectionLabel>Add resource</SectionLabel>
         <Field label="Name" value={name} onChangeText={setName} placeholder="Full name" />
         <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="98400 XXXXX" />
         <SectionLabel>Resource type</SectionLabel>
@@ -348,7 +237,7 @@ function ResourcesTab() {
           manually and never stored.
         </Text>
         <PrimaryButton title={saving ? 'Saving...' : 'Add resource'} onPress={addResource} disabled={saving} />
-      </AddModal>
+      </Card>
 
       {db.resources.map((r) => {
         const isActive = r.active !== false;
@@ -454,7 +343,6 @@ function BeneficiariesTab() {
 
   const [saving, setSaving] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
 
   function selectGeo(id) {
     setGeoId(id);
@@ -479,7 +367,7 @@ function BeneficiariesTab() {
         section,
         geoId: geoId || '',
       });
-      Alert.alert('Saved', 'Beneficiary added.', [{ text: 'OK', onPress: () => setShowAdd(false) }]);
+      Alert.alert('Saved', 'Beneficiary added.');
       setKlass('');
       setSection('');
     } catch (e) {
@@ -522,14 +410,8 @@ function BeneficiariesTab() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
-      <ListHeader
-        title="Beneficiaries"
-        count={db.beneficiaries.length}
-        onAdd={() => setShowAdd(true)}
-        addLabel="Add beneficiary"
-      />
-
-      <AddModal visible={showAdd} title="Add beneficiary" onClose={() => setShowAdd(false)}>
+      <Card>
+        <SectionLabel>Add beneficiary</SectionLabel>
         {geoOptions.length === 0 ? (
           <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
             No geofences set up yet -- you can still add this beneficiary, but
@@ -550,8 +432,7 @@ function BeneficiariesTab() {
         <Field label="Class" value={klass} onChangeText={setKlass} placeholder="Class 6" />
         <Field label="Section" value={section} onChangeText={setSection} placeholder="A" />
         <PrimaryButton title={saving ? 'Saving...' : 'Add beneficiary'} onPress={add} disabled={saving} />
-      </AddModal>
-
+      </Card>
       {db.beneficiaries.map((b) => {
         const g = getGeo(b.geoId);
         return editingId === b.id ? (
@@ -615,7 +496,6 @@ function CategoriesTab() {
   const [topic, setTopic] = useState('OTHERS');
   const [subtopic, setSubtopic] = useState('OTHERS');
   const [saving, setSaving] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [editPillar, setEditPillar] = useState(PILLARS[0]);
@@ -632,7 +512,7 @@ function CategoriesTab() {
         topic,
         subtopic,
       });
-      Alert.alert('Saved', 'Life skill category added.', [{ text: 'OK', onPress: () => setShowAdd(false) }]);
+      Alert.alert('Saved', 'Life skill category added.');
       setTopic('OTHERS');
       setSubtopic('OTHERS');
     } catch (e) {
@@ -668,21 +548,14 @@ function CategoriesTab() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
-      <ListHeader
-        title="Life skills"
-        count={db.categories.length}
-        onAdd={() => setShowAdd(true)}
-        addLabel="Add life skill"
-      />
-
-      <AddModal visible={showAdd} title="Add life skill category" onClose={() => setShowAdd(false)}>
+      <Card>
+        <SectionLabel>Add life skill category</SectionLabel>
         <SectionLabel>Pillar</SectionLabel>
         <Select value={pillar} onSelect={setPillar} options={PILLARS.map((p) => ({ value: p, label: p }))} />
         <Field label="Topic (Category 2)" value={topic} onChangeText={setTopic} placeholder="OTHERS" />
         <Field label="Sub-topic (Category 3, optional)" value={subtopic} onChangeText={setSubtopic} placeholder="OTHERS" />
         <PrimaryButton title={saving ? 'Saving...' : 'Add Life Skill'} onPress={add} disabled={saving} />
-      </AddModal>
-
+      </Card>
       {db.categories.map((c) =>
         editingId === c.id ? (
           <Card key={c.id}>
@@ -701,31 +574,31 @@ function CategoriesTab() {
             </View>
           </Card>
         ) : (
-          <Card key={c.id}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={{ fontWeight: '700', color: colors.text }}>{c.pillar}</Text>
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                  {c.id} - {c.topic} / {c.subtopic}
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                <TouchableOpacity onPress={() => startEdit(c)}>
-                  <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() =>
-                    Alert.alert('Delete category', `Remove ${c.pillar}?`, [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('categories', c.id) },
-                    ])
-                  }
-                >
-                  <Text style={{ color: colors.red, fontWeight: '700', marginLeft: spacing.sm }}>Delete</Text>
-                </TouchableOpacity>
-              </View>
+        <Card key={c.id}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ fontWeight: '700', color: colors.text }}>{c.pillar}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                {c.id} - {c.topic} / {c.subtopic}
+              </Text>
             </View>
-          </Card>
+            <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+              <TouchableOpacity onPress={() => startEdit(c)}>
+                <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() =>
+                  Alert.alert('Delete category', `Remove ${c.pillar}?`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('categories', c.id) },
+                  ])
+                }
+              >
+                <Text style={{ color: colors.red, fontWeight: '700', marginLeft: spacing.sm }}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Card>
         )
       )}
       <ImportFromExcel label="categories" table="categories" columnsHint="Pillar, Topic, Subtopic" />
@@ -742,7 +615,6 @@ function GeoTab() {
   const [radius, setRadius] = useState('150');
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [editLabel, setEditLabel] = useState('');
@@ -769,9 +641,11 @@ function GeoTab() {
     }
   }
 
-  // Note: the Add-geofence form now opens in a popup. Tapping "+" fills in the
-  // device's current location automatically (see onAdd below), so adding a
-  // geofence from the actual site still needs no manual coordinate entry.
+  // Default the Add-geofence form to the device's current location, so
+  // adding a geofence from the actual site needs no manual coordinate entry.
+  useEffect(() => {
+    useCurrentLocation();
+  }, []);
 
   async function add() {
     if (!school || !lat || !lng) return Alert.alert('Missing fields', 'School, latitude and longitude are required.');
@@ -785,7 +659,7 @@ function GeoTab() {
         lng: Number(lng),
         radiusMeters: Number(radius) || 150,
       });
-      Alert.alert('Saved', 'Geofence added.', [{ text: 'OK', onPress: () => setShowAdd(false) }]);
+      Alert.alert('Saved', 'Geofence added.');
       setSchool('');
       setLabel('');
       setLat('');
@@ -830,17 +704,8 @@ function GeoTab() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
-      <ListHeader
-        title="Geofences"
-        count={db.geo.length}
-        onAdd={() => {
-          setShowAdd(true);
-          useCurrentLocation();
-        }}
-        addLabel="Add geofence"
-      />
-
-      <AddModal visible={showAdd} title="Add geofence" onClose={() => setShowAdd(false)}>
+      <Card>
+        <SectionLabel>Add geofence</SectionLabel>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
           A school can have more than one geofence -- e.g. different blocks.
           Use the label to tell them apart when assigning one to a beneficiary.
@@ -863,8 +728,7 @@ function GeoTab() {
         </View>
         <Field label="Radius (metres)" value={radius} onChangeText={setRadius} keyboardType="number-pad" />
         <PrimaryButton title={saving ? 'Saving...' : 'Add geofence'} onPress={add} disabled={saving} />
-      </AddModal>
-
+      </Card>
       {db.geo.map((g) =>
         editingId === g.id ? (
           <Card key={g.id}>
