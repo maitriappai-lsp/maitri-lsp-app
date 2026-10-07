@@ -2,37 +2,21 @@
 // Same shape as the Facilitator dashboard, plus a facilitator filter (view
 // one facilitator's activity or all pooled together) and Edit/Delete rights
 // on any PSR/attendance/upload record from the drill-down.
-// Row actions (edit / delete / view) are compact icons.
 import React, { useMemo, useState } from 'react';
 import { ScrollView, Text, View, Alert, TouchableOpacity, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField, TimeField, SectionLabel } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { todayLocalYMD, isFutureTime } from '../../utils/date';
+import { todayLocalYMD } from '../../utils/date';
+import { isFutureTime } from '../../utils/date';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
 const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
-
-// Small tappable icon used in record rows (edit / delete / view).
-function IconButton({ name, color, label, onPress, size = 22 }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-      style={{ padding: 6 }}
-    >
-      <Ionicons name={name} size={size} color={color} />
-    </TouchableOpacity>
-  );
-}
 
 export default function AdminDashboardScreen() {
   const { db, deleteRecord, updateRecord } = useData();
@@ -489,19 +473,20 @@ export default function AdminDashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>School feedback: {p.schoolFeedback || '-'}</Text>
-                      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.xs }}>
-                        <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEditPsr(p)} />
-                        <IconButton
-                          name="trash-outline"
-                          color={colors.red}
-                          label="Delete"
+                      <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+                        <TouchableOpacity onPress={() => startEditPsr(p)}>
+                          <Text style={{ color: colors.primary, fontWeight: '700' }}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                           onPress={() =>
                             Alert.alert('Delete record', 'Remove this PSR record?', [
                               { text: 'Cancel', style: 'cancel' },
                               { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('psr', p.id) },
                             ])
                           }
-                        />
+                        >
+                          <Text style={{ color: colors.red, fontWeight: '700' }}>Delete this record</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
@@ -517,19 +502,16 @@ export default function AdminDashboardScreen() {
             return (
               <Card key={u.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <View style={{ flex: 1, paddingRight: spacing.sm }}>
+                  <View style={{ flex: 1, paddingRight: spacing.md }}>
                     <Text style={{ fontWeight: '700', color: colors.text }}>{u.fileName}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                       {f?.name} - {b?.school} - {u.date}
                     </Text>
                   </View>
                   {u.fileUrl ? (
-                    <IconButton
-                      name="open-outline"
-                      color={colors.primary}
-                      label="View"
-                      onPress={() => Linking.openURL(u.fileUrl)}
-                    />
+                    <TouchableOpacity onPress={() => Linking.openURL(u.fileUrl)}>
+                      <Text style={{ color: colors.primary, fontWeight: '700' }}>View</Text>
+                    </TouchableOpacity>
                   ) : (
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>No file</Text>
                   )}
@@ -626,22 +608,14 @@ export default function AdminDashboardScreen() {
                       Time in: {a.timeIn || '--'}   Time out: {a.timeOut || '--'}
                     </Text>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={{ color: colors.textMuted, fontSize: 12, flex: 1, marginRight: spacing.sm }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                         {a.geoVerified ? 'Geofence verified' : 'Not geofence-verified'}
                       </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <IconButton
-                          name="create-outline"
-                          color={colors.primary}
-                          label="Edit"
-                          size={20}
-                          onPress={() => startEditAttendance(a)}
-                        />
-                        <IconButton
-                          name="trash-outline"
-                          color={colors.red}
-                          label="Delete"
-                          size={20}
+                      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                        <TouchableOpacity onPress={() => startEditAttendance(a)}>
+                          <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                           onPress={() => {
                             const linkedSessions = db.psr.filter((p) => p.attendanceId === a.id);
                             if (linkedSessions.length > 0) {
@@ -656,7 +630,9 @@ export default function AdminDashboardScreen() {
                               { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('attendance', a.id) },
                             ]);
                           }}
-                        />
+                        >
+                          <Text style={{ color: colors.red, fontWeight: '700', fontSize: 12 }}>Delete</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </Card>

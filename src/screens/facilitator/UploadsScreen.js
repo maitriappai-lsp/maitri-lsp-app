@@ -4,8 +4,23 @@
 // configured, local disk otherwise -- see backend/src/routes/files.js),
 // then records the metadata with the returned storagePath and openable
 // fileUrl.
+//
+// Layout: the list of my uploads comes first, with a round "+" button at the
+// top right. Tapping "+" opens the upload form in a popup. The row action
+// (view) is a compact icon.
 import React, { useState } from 'react';
-import { ScrollView, Text, View, Alert, Linking } from 'react-native';
+import {
+  ScrollView,
+  Text,
+  View,
+  Alert,
+  Linking,
+  TouchableOpacity,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
@@ -13,6 +28,109 @@ import { apiPost } from '../../data/api';
 import { todayLocalYMD } from '../../utils/date';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+
+// Round "+" button shown at the top-right of the list.
+function AddButton({ onPress, label }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+      }}
+    >
+      <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '600' }}>+</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Small tappable icon used in each record row (view).
+function IconButton({ name, color, label, onPress }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      style={{ padding: 6 }}
+    >
+      <Ionicons name={name} size={22} color={color} />
+    </TouchableOpacity>
+  );
+}
+
+// Row above the list: "My uploads (8)" on the left, "+" on the right.
+function ListHeader({ title, count, onAdd, addLabel }) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.md,
+      }}
+    >
+      <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
+        {title} ({count})
+      </Text>
+      <AddButton onPress={onAdd} label={addLabel} />
+    </View>
+  );
+}
+
+// Bottom-sheet popup that holds the upload form.
+function AddModal({ visible, title, onClose, children }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        enabled={Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+          <View
+            style={{
+              backgroundColor: colors.bg,
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              padding: spacing.lg,
+              maxHeight: '90%',
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: spacing.md,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{title}</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {children}
+              <View style={{ height: spacing.xl }} />
+            </ScrollView>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
 
 export default function UploadsScreen() {
   const { currentUser } = useAuth();
@@ -23,11 +141,18 @@ export default function UploadsScreen() {
   const [description, setDescription] = useState('');
   const [picked, setPicked] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
 
   const myUploads = db.uploads
     .filter((u) => u.facilitatorId === currentUser?.id)
     .slice()
     .reverse();
+
+  function closeAdd() {
+    setShowAdd(false);
+    setPicked(null);
+    setDescription('');
+  }
 
   async function pickFile() {
     // No type restriction -- session evidence could be a photo, PDF, audio
@@ -60,8 +185,7 @@ export default function UploadsScreen() {
         storagePath,
         fileUrl: url,
       });
-      setPicked(null);
-      setDescription('');
+      closeAdd();
     } catch (e) {
       Alert.alert('Upload failed', e.message || 'Please try again.');
     } finally {
@@ -73,9 +197,17 @@ export default function UploadsScreen() {
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false}>
         <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.lg }}>
-          Upload a file
+          Uploads
         </Text>
-        <Card>
+
+        <ListHeader
+          title="My uploads"
+          count={myUploads.length}
+          onAdd={() => setShowAdd(true)}
+          addLabel="Upload a file"
+        />
+
+        <AddModal visible={showAdd} title="Upload a file" onClose={closeAdd}>
           <SectionLabel>Link to beneficiary</SectionLabel>
           <Select
             value={beneficiaryId}
@@ -99,23 +231,32 @@ export default function UploadsScreen() {
             onPress={pickFile}
             style={{ marginBottom: spacing.md }}
           />
-          <PrimaryButton title="Upload" onPress={upload} disabled={!picked} />
-        </Card>
+          <PrimaryButton title={uploading ? 'Uploading...' : 'Upload'} onPress={upload} disabled={!picked || uploading} />
+        </AddModal>
 
-        <SectionLabel>Uploaded this week</SectionLabel>
-        {myUploads.slice(0, 10).map((u) => {
+        {myUploads.length === 0 && (
+          <Text style={{ color: colors.textMuted, marginBottom: spacing.md }}>
+            No uploads yet. Tap + to upload your first file.
+          </Text>
+        )}
+        {myUploads.slice(0, 20).map((u) => {
           const b = db.beneficiaries.find((x) => x.id === u.beneficiaryId);
           return (
             <Card key={u.id}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <View style={{ flex: 1, paddingRight: spacing.md }}>
+                <View style={{ flex: 1, paddingRight: spacing.sm }}>
                   <Text style={{ fontWeight: '700', color: colors.text }}>{u.fileName}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                     {b?.school} - {u.date}
                   </Text>
                 </View>
                 {u.fileUrl ? (
-                  <SecondaryButton title="View" onPress={() => Linking.openURL(u.fileUrl)} />
+                  <IconButton
+                    name="open-outline"
+                    color={colors.primary}
+                    label="View"
+                    onPress={() => Linking.openURL(u.fileUrl)}
+                  />
                 ) : (
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>No file</Text>
                 )}
@@ -123,6 +264,11 @@ export default function UploadsScreen() {
             </Card>
           );
         })}
+        {myUploads.length > 20 && (
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
+            Showing your latest 20 uploads.
+          </Text>
+        )}
       </ScrollView>
     </Screen>
   );

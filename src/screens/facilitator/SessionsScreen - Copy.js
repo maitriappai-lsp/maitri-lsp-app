@@ -6,32 +6,23 @@
 // (check-in/check-out, geofence/face verification, ad-hoc flag) -- this
 // screen's job is the session-quality side: category, rating, feedback.
 //
-// Layout: the list of my session records comes first, with a round "+"
-// button at the top right (showing a red count when check-ins are waiting
-// for session details). Tapping "+" opens a popup with two tabs:
-//  - "Today's check-ins": attendance rows for today that don't have a linked
-//    PSR yet. Saving one creates that PSR, linked back to the attendance row
+// Two ways to create a session record, switched with the tabs at the top
+// rather than stacked one after the other:
+//  - "Check-ins": attendance rows for today that don't have a linked PSR
+//    yet. Saving one creates that PSR, linked back to the attendance row
 //    via attendanceId. This is the normal path.
 //  - "Add manually": a record for a visit that didn't go through the
 //    check-in flow. Still requires some attendance today.
 // Both forms share the same fields (SessionFields) and the same
 // validation (validateSession), so they can't drift apart.
 import React, { useState } from 'react';
-import {
-  ScrollView,
-  Text,
-  View,
-  Alert,
-  TouchableOpacity,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { ScrollView, Text, View, Alert, TouchableOpacity } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import {
   Screen,
   Card,
+  SectionLabel,
   FieldLabel,
   Field,
   Select,
@@ -47,116 +38,6 @@ const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
 
 // ---- Small building blocks -------------------------------------------------
-
-// Round "+" button shown at the top-right of the list. `badge` (optional) is
-// a small red count shown on its corner.
-function AddButton({ onPress, label, badge }) {
-  return (
-    <View>
-      <TouchableOpacity
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: colors.primary,
-          alignItems: 'center',
-          justifyContent: 'center',
-          elevation: 3,
-          shadowColor: '#000',
-          shadowOpacity: 0.2,
-          shadowRadius: 3,
-          shadowOffset: { width: 0, height: 2 },
-        }}
-      >
-        <Text style={{ color: '#fff', fontSize: 28, lineHeight: 30, fontWeight: '600' }}>+</Text>
-      </TouchableOpacity>
-      {badge > 0 && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: -4,
-            right: -4,
-            minWidth: 20,
-            height: 20,
-            borderRadius: 10,
-            backgroundColor: colors.red,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 4,
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{badge}</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-// Row above the list: "My sessions (12)" on the left, "+" on the right.
-function ListHeader({ title, count, onAdd, addLabel, badge }) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: spacing.md,
-      }}
-    >
-      <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
-        {title} ({count})
-      </Text>
-      <AddButton onPress={onAdd} label={addLabel} badge={badge} />
-    </View>
-  );
-}
-
-// Bottom-sheet popup that holds the add-session forms.
-function AddModal({ visible, title, onClose, children }) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        enabled={Platform.OS === 'ios'}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
-          <View
-            style={{
-              backgroundColor: colors.bg,
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              padding: spacing.lg,
-              maxHeight: '92%',
-            }}
-          >
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: spacing.md,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{title}</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '700' }}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              {children}
-              <View style={{ height: spacing.xl }} />
-            </ScrollView>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
 
 function Segmented({ tabs, value, onChange }) {
   return (
@@ -409,7 +290,7 @@ function SessionFields({ f, date, beneficiaryPicker }) {
 
 // ---- Tab 1: complete a check-in --------------------------------------------
 
-function CompleteCheckIn({ attendanceRecord, onSaved }) {
+function CompleteCheckIn({ attendanceRecord }) {
   const { db, addRecord, nextId } = useData();
   const beneficiary = db.beneficiaries.find((b) => b.id === attendanceRecord.beneficiaryId);
   const f = useSessionFields({
@@ -434,7 +315,7 @@ function CompleteCheckIn({ attendanceRecord, onSaved }) {
       // No local "done" state needed -- once a psr with this attendanceId
       // exists, this attendance record naturally drops out of
       // pendingCheckIns on the next render.
-      Alert.alert('Saved', 'Session details recorded.', [{ text: 'OK', onPress: onSaved }]);
+      Alert.alert('Saved', 'Session details recorded.');
     } catch (e) {
       Alert.alert('Could not save', e.message || 'Please try again.');
     } finally {
@@ -499,7 +380,7 @@ export default function SessionsScreen() {
     (a) => a.facilitatorId === currentUser?.id && a.date === today
   );
 
-  const [showAdd, setShowAdd] = useState(false);
+  // Open on whichever tab has something to do.
   const [tab, setTab] = useState(pendingCheckIns.length > 0 ? 'checkins' : 'manual');
   const [beneficiaryId, setBeneficiaryId] = useState(db.beneficiaries[0]?.id);
   const manual = useSessionFields();
@@ -508,16 +389,6 @@ export default function SessionsScreen() {
     .filter((p) => p.facilitatorId === currentUser?.id)
     .slice()
     .reverse();
-
-  // Opens the popup on whichever tab has something to do.
-  function openAdd() {
-    setTab(pendingCheckIns.length > 0 ? 'checkins' : 'manual');
-    setShowAdd(true);
-  }
-
-  function closeAdd() {
-    setShowAdd(false);
-  }
 
   async function submitManual() {
     if (!hasAttendanceToday) {
@@ -538,7 +409,7 @@ export default function SessionsScreen() {
         date: today,
         ...toPsrFields(manual),
       });
-      Alert.alert('Saved', 'Session record submitted.', [{ text: 'OK', onPress: closeAdd }]);
+      Alert.alert('Saved', 'Session record submitted.');
       manual.reset();
     } catch (e) {
       Alert.alert('Could not save', e.message || 'Please try again.');
@@ -552,103 +423,72 @@ export default function SessionsScreen() {
           Post-Session Record
         </Text>
 
-        <ListHeader
-          title="My sessions"
-          count={mySessions.length}
-          onAdd={openAdd}
-          addLabel="Add session record"
-          badge={pendingCheckIns.length}
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: 'checkins', label: "Today's check-ins", count: pendingCheckIns.length },
+            { key: 'manual', label: 'Add manually' },
+          ]}
         />
 
-        {pendingCheckIns.length > 0 && (
-          <TouchableOpacity onPress={openAdd} activeOpacity={0.8}>
-            <Card style={{ borderColor: colors.amber }}>
-              <Text style={{ fontWeight: '700', color: colors.amber }}>
-                {pendingCheckIns.length} check-in{pendingCheckIns.length > 1 ? 's are' : ' is'} waiting for session details
-              </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                Tap here, or the + button, to complete {pendingCheckIns.length > 1 ? 'them' : 'it'}.
-              </Text>
-            </Card>
-          </TouchableOpacity>
+        {tab === 'checkins' && (
+          <>
+            {pendingCheckIns.length === 0 ? (
+              <Card>
+                <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>You're all caught up</Text>
+                <Text style={{ color: colors.textMuted }}>
+                  No check-ins are waiting for a session record. When you time in on the Attendance screen, the
+                  visit will show up here to complete.
+                </Text>
+              </Card>
+            ) : (
+              pendingCheckIns.map((a) => <CompleteCheckIn key={a.id} attendanceRecord={a} />)
+            )}
+          </>
         )}
 
-        <AddModal visible={showAdd} title="Add session record" onClose={closeAdd}>
-          <Segmented
-            value={tab}
-            onChange={setTab}
-            tabs={[
-              { key: 'checkins', label: "Today's check-ins", count: pendingCheckIns.length },
-              { key: 'manual', label: 'Add manually' },
-            ]}
-          />
+        {tab === 'manual' && (
+          <>
+            {!hasAttendanceToday ? (
+              <Card>
+                <Text style={{ color: colors.textMuted }}>
+                  You haven't marked attendance today. Check in on the Attendance screen first -- a session record
+                  can't be logged for a day with no attendance behind it.
+                </Text>
+              </Card>
+            ) : (
+              <Card>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
+                  For a visit that isn't in your check-ins. Anything you checked in for should be completed from
+                  the Today's check-ins tab instead.
+                </Text>
+                <SessionFields
+                  f={manual}
+                  date={today}
+                  beneficiaryPicker={
+                    <Select
+                      label="Beneficiary (required)"
+                      value={beneficiaryId}
+                      onSelect={setBeneficiaryId}
+                      options={db.beneficiaries.map((b) => ({
+                        value: b.id,
+                        label: `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}`,
+                      }))}
+                    />
+                  }
+                />
+                <PrimaryButton title="Submit session record" onPress={submitManual} />
+              </Card>
+            )}
+          </>
+        )}
 
-          {tab === 'checkins' && (
-            <>
-              {pendingCheckIns.length === 0 ? (
-                <Card>
-                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>You're all caught up</Text>
-                  <Text style={{ color: colors.textMuted }}>
-                    No check-ins are waiting for a session record. When you time in on the Attendance screen, the
-                    visit will show up here to complete.
-                  </Text>
-                </Card>
-              ) : (
-                pendingCheckIns.map((a) => (
-                  <CompleteCheckIn
-                    key={a.id}
-                    attendanceRecord={a}
-                    onSaved={() => {
-                      // Close once the last waiting check-in has been saved.
-                      if (pendingCheckIns.length <= 1) closeAdd();
-                    }}
-                  />
-                ))
-              )}
-            </>
-          )}
-
-          {tab === 'manual' && (
-            <>
-              {!hasAttendanceToday ? (
-                <Card>
-                  <Text style={{ color: colors.textMuted }}>
-                    You haven't marked attendance today. Check in on the Attendance screen first -- a session record
-                    can't be logged for a day with no attendance behind it.
-                  </Text>
-                </Card>
-              ) : (
-                <Card>
-                  <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
-                    For a visit that isn't in your check-ins. Anything you checked in for should be completed from
-                    the Today's check-ins tab instead.
-                  </Text>
-                  <SessionFields
-                    f={manual}
-                    date={today}
-                    beneficiaryPicker={
-                      <Select
-                        label="Beneficiary (required)"
-                        value={beneficiaryId}
-                        onSelect={setBeneficiaryId}
-                        options={db.beneficiaries.map((b) => ({
-                          value: b.id,
-                          label: `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}`,
-                        }))}
-                      />
-                    }
-                  />
-                  <PrimaryButton title="Submit session record" onPress={submitManual} />
-                </Card>
-              )}
-            </>
-          )}
-        </AddModal>
-
+        <SectionLabel>Recent submissions</SectionLabel>
         {mySessions.length === 0 && (
           <Text style={{ color: colors.textMuted, marginBottom: spacing.md }}>No session records yet.</Text>
         )}
-        {mySessions.slice(0, 20).map((p) => {
+        {mySessions.slice(0, 5).map((p) => {
           const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
           return (
             <Card key={p.id}>
@@ -665,11 +505,6 @@ export default function SessionsScreen() {
             </Card>
           );
         })}
-        {mySessions.length > 20 && (
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
-            Showing your latest 20 session records.
-          </Text>
-        )}
       </ScrollView>
     </Screen>
   );
