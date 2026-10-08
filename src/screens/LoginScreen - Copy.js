@@ -119,7 +119,11 @@ export default function LoginScreen() {
             style={{ marginTop: spacing.md, borderColor: 'transparent' }}
           />
         </Card>
-       
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.lg }}>
+          Demo accounts: 9840012345 / changeme123 (Facilitator), 9840034567 /
+          changeme123 (Admin), 9840023456 / changeme123 (Facilitator, forces
+          password change).
+        </Text>
       </Screen>
     </KeyboardAvoidingView>
   );
