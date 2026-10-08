@@ -274,6 +274,10 @@ function validateSession(f, date) {
   if (isFutureTime(date, f.timeIn) || isFutureTime(date, f.timeOut)) {
     return ['Time is in the future', 'Time in and time out cannot be later than the current time.'];
   }
+  if (!String(f.studentsPresent).trim()) return ['Students present required', 'Enter the number of students present.'];
+  if (!/^\d+$/.test(String(f.studentsPresent).trim())) {
+    return ['Check students present', 'Enter a whole number, like 28.'];
+  }
   if (!f.rag) return ['RAG status required', 'Select a RAG status.'];
   return null;
 }
@@ -335,11 +339,10 @@ function SessionFields({ f, date, beneficiaryPicker }) {
       </View>
 
       <Field
-        label="Students present"
+        label="Students present (required)"
         value={f.studentsPresent}
         onChangeText={f.setStudentsPresent}
         keyboardType="number-pad"
-        placeholder="28"
       />
 
       <ChoiceRow

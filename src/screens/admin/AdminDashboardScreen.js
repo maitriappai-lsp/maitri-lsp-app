@@ -489,6 +489,12 @@ export default function AdminDashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>School feedback: {p.schoolFeedback || '-'}</Text>
+                      {p.externalOrgName ? (
+                        <Text style={{ color: colors.text, fontSize: 13 }}>External org: {p.externalOrgName}</Text>
+                      ) : null}
+                      {p.externalResources ? (
+                        <Text style={{ color: colors.text, fontSize: 13 }}>External resources: {p.externalResources}</Text>
+                      ) : null}
                       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.xs }}>
                         <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEditPsr(p)} />
                         <IconButton

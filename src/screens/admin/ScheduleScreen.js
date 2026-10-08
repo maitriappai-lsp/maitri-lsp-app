@@ -312,7 +312,10 @@ export default function ScheduleScreen() {
               <Select
                 value={beneficiaryId}
                 onSelect={setBeneficiaryId}
-                options={db.beneficiaries.map((b) => ({ value: b.id, label: `${b.school} - ${b.class}` }))}
+                options={db.beneficiaries.map((b) => ({
+                  value: b.id,
+                  label: `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}`,
+                }))}
               />
               <SectionLabel>Facilitator</SectionLabel>
               <Select
