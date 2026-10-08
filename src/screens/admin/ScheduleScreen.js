@@ -30,6 +30,18 @@ const DAY_INDEX = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 
 const FREQUENCIES = ['Weekly', 'Fortnightly', 'Monthly'];
 const FREQUENCY_DAYS = { Weekly: 7, Fortnightly: 14, Monthly: 28 }; // Monthly = every 4 weeks, confirmed
 
+// The assistant is optional. Select needs a real value for every option, so
+// "no assistant" is represented by this sentinel in the UI and converted to
+// null before anything is saved. An assistant can't be the same person as
+// the session's facilitator, so that person is left out of the options.
+const NO_ASSISTANT = 'NONE';
+function assistantOptions(facilitators, excludeId) {
+  return [
+    { value: NO_ASSISTANT, label: 'None' },
+    ...facilitators.filter((f) => f.id !== excludeId).map((f) => ({ value: f.id, label: f.name })),
+  ];
+}
+
 function generateDates(startDate, endDate, dayOfWeek, frequency) {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -157,6 +169,7 @@ export default function ScheduleScreen() {
   const [facilitatorId, setFacilitatorId] = useState(
     db.resources.find((r) => r.role === 'Facilitator')?.id
   );
+  const [assistantId, setAssistantId] = useState(NO_ASSISTANT);
   const [frequency, setFrequency] = useState('Weekly');
   const [dayOfWeek, setDayOfWeek] = useState('Monday');
   const [startDate, setStartDate] = useState('2026-09-21');
@@ -198,6 +211,7 @@ export default function ScheduleScreen() {
         id: ids[i],
         beneficiaryId,
         facilitatorId,
+        assistantId: assistantId === NO_ASSISTANT ? null : assistantId,
         date,
         time,
         categoryId: categoryBySession[date],
@@ -215,6 +229,7 @@ export default function ScheduleScreen() {
   const [editingId, setEditingId] = useState(null);
   const [editBeneficiaryId, setEditBeneficiaryId] = useState(null);
   const [editFacilitatorId, setEditFacilitatorId] = useState(null);
+  const [editAssistantId, setEditAssistantId] = useState(NO_ASSISTANT);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
   const [editCategoryId, setEditCategoryId] = useState(null);
@@ -224,6 +239,7 @@ export default function ScheduleScreen() {
     setEditingId(sess.id);
     setEditBeneficiaryId(sess.beneficiaryId);
     setEditFacilitatorId(sess.facilitatorId);
+    setEditAssistantId(sess.assistantId || NO_ASSISTANT);
     setEditDate(sess.date);
     setEditTime(sess.time || '');
     setEditCategoryId(sess.categoryId);
@@ -232,6 +248,9 @@ export default function ScheduleScreen() {
   async function saveEdit() {
     if (!editBeneficiaryId) return Alert.alert('Beneficiary required', 'Select a beneficiary.');
     if (!editFacilitatorId) return Alert.alert('Facilitator required', 'Select a facilitator.');
+    if (editAssistantId !== NO_ASSISTANT && editAssistantId === editFacilitatorId) {
+      return Alert.alert('Check the assistant', 'The assistant cannot be the same person as the facilitator.');
+    }
     if (!editDate) return Alert.alert('Date required', 'Pick a date.');
     if (editDate < todayLocalYMD()) {
       return Alert.alert('Date is in the past', 'A scheduled session cannot be dated before today.');
@@ -244,6 +263,7 @@ export default function ScheduleScreen() {
       await updateRecord('schedule', editingId, {
         beneficiaryId: editBeneficiaryId,
         facilitatorId: editFacilitatorId,
+        assistantId: editAssistantId === NO_ASSISTANT ? null : editAssistantId,
         date: editDate,
         time: editTime.trim(),
         categoryId: editCategoryId || null,
@@ -320,8 +340,17 @@ export default function ScheduleScreen() {
               <SectionLabel>Facilitator</SectionLabel>
               <Select
                 value={facilitatorId}
-                onSelect={setFacilitatorId}
+                onSelect={(v) => {
+                  setFacilitatorId(v);
+                  if (v === assistantId) setAssistantId(NO_ASSISTANT);
+                }}
                 options={facilitators.map((f) => ({ value: f.id, label: f.name }))}
+              />
+              <SectionLabel>Assistant (optional)</SectionLabel>
+              <Select
+                value={assistantId}
+                onSelect={setAssistantId}
+                options={assistantOptions(facilitators, facilitatorId)}
               />
               <SectionLabel>Frequency</SectionLabel>
               <Select
@@ -369,6 +398,7 @@ export default function ScheduleScreen() {
           .map((s) => {
             const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
             const f = db.resources.find((x) => x.id === s.facilitatorId);
+            const asst = s.assistantId ? db.resources.find((x) => x.id === s.assistantId) : null;
             const c = db.categories.find((x) => x.id === s.categoryId);
 
             if (editingId === s.id) {
@@ -389,8 +419,17 @@ export default function ScheduleScreen() {
                   <Select
                     label="Facilitator"
                     value={editFacilitatorId}
-                    onSelect={setEditFacilitatorId}
+                    onSelect={(v) => {
+                      setEditFacilitatorId(v);
+                      if (v === editAssistantId) setEditAssistantId(NO_ASSISTANT);
+                    }}
                     options={facilitators.map((x) => ({ value: x.id, label: x.name }))}
+                  />
+                  <Select
+                    label="Assistant (optional)"
+                    value={editAssistantId}
+                    onSelect={setEditAssistantId}
+                    options={assistantOptions(facilitators, editFacilitatorId)}
                   />
                   <View style={{ flexDirection: 'row', gap: spacing.md }}>
                     <View style={{ flex: 1 }}>
@@ -420,6 +459,11 @@ export default function ScheduleScreen() {
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                       {s.date} - {s.time} - {f?.name} assigned
                     </Text>
+                    {asst && (
+                      <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                        Assistant: {asst.name}
+                      </Text>
+                    )}
                     {c && (
                       <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                         {c.pillar} / {c.topic}
@@ -449,8 +493,8 @@ export default function ScheduleScreen() {
           <SectionLabel>Import from Excel</SectionLabel>
           <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
             Bulk-upload the entire schedule master directly, as an alternative to the recurrence builder above.
-            Column headers (row 1): School, Class, Section, Facilitator Phone, Date, Time, Pillar, Topic, Subtopic
-            (Pillar/Topic/Subtopic optional).
+            Column headers (row 1): School, Class, Section, Facilitator Phone, Date, Time, Pillar, Topic, Subtopic,
+            Assistant Phone (Pillar/Topic/Subtopic and Assistant Phone optional).
           </Text>
           <SecondaryButton title={importing ? 'Importing...' : 'Choose file & import'} onPress={importSchedule} disabled={importing} />
         </Card>
