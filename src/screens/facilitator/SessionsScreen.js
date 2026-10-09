@@ -46,6 +46,19 @@ import { todayLocalYMD, parseTimeToMinutes, isFutureTime } from '../../utils/dat
 const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
 
+// The assistant is optional. Select needs a real value for every option, so
+// "no assistant" is this sentinel in the UI, converted to null on save. The
+// session's own facilitator is left out of the options.
+const NO_ASSISTANT = 'NONE';
+function assistantOptions(db, facilitatorId) {
+  return [
+    { value: NO_ASSISTANT, label: 'None' },
+    ...db.resources
+      .filter((r) => r.role === 'Facilitator' && r.id !== facilitatorId)
+      .map((r) => ({ value: r.id, label: r.name })),
+  ];
+}
+
 // ---- Small building blocks -------------------------------------------------
 
 // Round "+" button shown at the top-right of the list. `badge` (optional) is
@@ -223,9 +236,10 @@ function Divider() {
 
 // ---- Shared form state, fields and validation ------------------------------
 
-function useSessionFields({ timeIn = '', timeOut = '' } = {}) {
+function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssistantId } = {}) {
   const { db } = useData();
   const [categoryId, setCategoryId] = useState(db.categories[0]?.id);
+  const [assistantId, setAssistantId] = useState(initialAssistantId || NO_ASSISTANT);
   const [studentsPresent, setStudentsPresent] = useState('');
   const [timeInValue, setTimeIn] = useState(timeIn);
   const [timeOutValue, setTimeOut] = useState(timeOut);
@@ -239,6 +253,7 @@ function useSessionFields({ timeIn = '', timeOut = '' } = {}) {
 
   return {
     categoryId, setCategoryId,
+    assistantId, setAssistantId,
     studentsPresent, setStudentsPresent,
     timeIn: timeInValue, setTimeIn,
     timeOut: timeOutValue, setTimeOut,
@@ -251,6 +266,7 @@ function useSessionFields({ timeIn = '', timeOut = '' } = {}) {
     photosUploaded, setPhotosUploaded,
     // Clears what's specific to one visit, keeping category/rating/RAG.
     reset() {
+      setAssistantId(NO_ASSISTANT);
       setStudentsPresent('');
       setTimeIn('');
       setTimeOut('');
@@ -287,6 +303,7 @@ function toPsrFields(f) {
     timeIn: f.timeIn,
     timeOut: f.timeOut,
     categoryId: f.categoryId,
+    assistantId: f.assistantId === NO_ASSISTANT ? null : f.assistantId,
     studentsPresent: Number(f.studentsPresent) || 0,
     rating: f.rating,
     rag: f.rag,
@@ -298,7 +315,7 @@ function toPsrFields(f) {
   };
 }
 
-function SessionFields({ f, date, beneficiaryPicker }) {
+function SessionFields({ f, date, facilitatorId, beneficiaryPicker }) {
   const { db } = useData();
   // Optional extras stay tucked away unless they're already filled in.
   const [showOptional, setShowOptional] = useState(
@@ -317,6 +334,13 @@ function SessionFields({ f, date, beneficiaryPicker }) {
           value: c.id,
           label: `${c.pillar} / ${c.topic}${c.subtopic !== 'OTHERS' ? ' / ' + c.subtopic : ''}`,
         }))}
+      />
+
+      <Select
+        label="Assistant (optional)"
+        value={f.assistantId}
+        onSelect={f.setAssistantId}
+        options={assistantOptions(db, facilitatorId)}
       />
 
       <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -415,9 +439,18 @@ function SessionFields({ f, date, beneficiaryPicker }) {
 function CompleteCheckIn({ attendanceRecord, onSaved }) {
   const { db, addRecord, nextId } = useData();
   const beneficiary = db.beneficiaries.find((b) => b.id === attendanceRecord.beneficiaryId);
+  // If this visit was on the schedule with an assistant, start with that
+  // assistant selected (still editable).
+  const scheduled = db.schedule.find(
+    (s) =>
+      s.date === attendanceRecord.date &&
+      s.beneficiaryId === attendanceRecord.beneficiaryId &&
+      s.facilitatorId === attendanceRecord.facilitatorId
+  );
   const f = useSessionFields({
     timeIn: attendanceRecord.timeIn || '',
     timeOut: attendanceRecord.timeOut || '',
+    assistantId: scheduled?.assistantId,
   });
   const [saving, setSaving] = useState(false);
 
@@ -478,7 +511,7 @@ function CompleteCheckIn({ attendanceRecord, onSaved }) {
 
       <Divider />
 
-      <SessionFields f={f} date={attendanceRecord.date} />
+      <SessionFields f={f} date={attendanceRecord.date} facilitatorId={attendanceRecord.facilitatorId} />
       <PrimaryButton title={saving ? 'Saving...' : 'Save session details'} onPress={save} disabled={saving} />
     </Card>
   );
@@ -629,6 +662,7 @@ export default function SessionsScreen() {
                   <SessionFields
                     f={manual}
                     date={today}
+                    facilitatorId={currentUser?.id}
                     beneficiaryPicker={
                       <Select
                         label="Beneficiary (required)"
@@ -653,6 +687,7 @@ export default function SessionsScreen() {
         )}
         {mySessions.slice(0, 20).map((p) => {
           const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
+          const asst = p.assistantId ? db.resources.find((x) => x.id === p.assistantId) : null;
           return (
             <Card key={p.id}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -665,6 +700,9 @@ export default function SessionsScreen() {
               <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                 {p.date} - {p.studentsPresent} students - {p.rating}
               </Text>
+              {asst && (
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Assistant: {asst.name}</Text>
+              )}
             </Card>
           );
         })}

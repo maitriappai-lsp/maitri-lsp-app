@@ -58,7 +58,8 @@ export default function DashboardScreen() {
   const mySchedule = useMemo(
     () =>
       db.schedule
-        .filter((s) => s.facilitatorId === currentUser?.id)
+        // Sessions where I'm the facilitator OR the assistant.
+        .filter((s) => s.facilitatorId === currentUser?.id || s.assistantId === currentUser?.id)
         .filter((s) => s.date >= from && s.date <= to)
         .slice()
         .sort((a, b) => (a.date === b.date ? (a.time || '').localeCompare(b.time || '') : a.date < b.date ? -1 : 1)),
@@ -171,6 +172,7 @@ export default function DashboardScreen() {
             const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
             const cat = db.categories.find((x) => x.id === p.categoryId);
             const isOpen = expandedId === p.id;
+            const sessionAssistant = p.assistantId ? db.resources.find((x) => x.id === p.assistantId) : null;
             return (
               <TouchableOpacity key={p.id} onPress={() => setExpandedId(isOpen ? null : p.id)}>
                 <Card>
@@ -183,6 +185,7 @@ export default function DashboardScreen() {
                   </Text>
                   {isOpen && (
                     <View style={{ marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm }}>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Assistant: {sessionAssistant?.name || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time: {p.timeIn} - {p.timeOut}</Text>
@@ -205,6 +208,9 @@ export default function DashboardScreen() {
             mySchedule.map((s) => {
               const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
               const cat = db.categories.find((x) => x.id === s.categoryId);
+              const isAssisting = s.assistantId === currentUser?.id && s.facilitatorId !== currentUser?.id;
+              const mainFacilitator = db.resources.find((x) => x.id === s.facilitatorId);
+              const assistant = s.assistantId ? db.resources.find((x) => x.id === s.assistantId) : null;
               return (
                 <Card key={s.id}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -218,6 +224,15 @@ export default function DashboardScreen() {
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                       {cat.pillar} / {cat.topic}
                     </Text>
+                  )}
+                  {isAssisting ? (
+                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>
+                      Assisting{mainFacilitator ? ` - Facilitator: ${mainFacilitator.name}` : ''}
+                    </Text>
+                  ) : (
+                    assistant && (
+                      <Text style={{ color: colors.textMuted, fontSize: 12 }}>Assistant: {assistant.name}</Text>
+                    )
                   )}
                 </Card>
               );
