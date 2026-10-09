@@ -42,6 +42,55 @@ function assistantOptions(facilitators, excludeId) {
   ];
 }
 
+// Schedule entries only have a start time, no end time, so "overlap" assumes
+// each session lasts this long. A resource (facilitator OR assistant) can't
+// be in two sessions on the same day whose start times are closer than this.
+const SESSION_MINUTES = 60;
+
+// Existing schedule entries that clash with `entry` ({ date, time,
+// facilitatorId, assistantId }). The same person counts whether they're the
+// facilitator or the assistant on the other entry. `ignoreId` skips the
+// entry being edited.
+function findConflicts(db, entry, ignoreId) {
+  const start = parseTimeToMinutes(entry.time);
+  if (start == null) return [];
+  const people = [entry.facilitatorId, entry.assistantId].filter(Boolean);
+  const out = [];
+  for (const s of db.schedule) {
+    if (s.id === ignoreId || s.date !== entry.date) continue;
+    const other = parseTimeToMinutes(s.time);
+    if (other == null || Math.abs(other - start) >= SESSION_MINUTES) continue;
+    const clashing = people.filter((p) => p === s.facilitatorId || p === s.assistantId);
+    if (clashing.length > 0) out.push({ sched: s, people: clashing });
+  }
+  return out;
+}
+
+function describeConflict(db, c) {
+  const name = (id) => db.resources.find((r) => r.id === id)?.name || id;
+  const b = db.beneficiaries.find((x) => x.id === c.sched.beneficiaryId);
+  return `${c.people.map(name).join(' & ')} already booked at ${c.sched.time}${b ? ` (${b.school})` : ''}`;
+}
+
+// First problem with a schedule entry ({ date, time, beneficiaryId,
+// facilitatorId, assistantId }), as a message, or null if it's fine:
+//  1. a beneficiary can have only one session on a given day (any facilitator);
+//  2. a person can't be booked in two sessions at the same time.
+function scheduleClash(db, entry, ignoreId) {
+  if (entry.beneficiaryId) {
+    const sameDay = db.schedule.find(
+      (s) => s.id !== ignoreId && s.date === entry.date && s.beneficiaryId === entry.beneficiaryId
+    );
+    if (sameDay) {
+      const b = db.beneficiaries.find((x) => x.id === entry.beneficiaryId);
+      const f = db.resources.find((x) => x.id === sameDay.facilitatorId);
+      return `${b ? `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}` : 'This beneficiary'} already has a session on ${entry.date}${f ? ` (${f.name})` : ''}`;
+    }
+  }
+  const timeClash = findConflicts(db, entry, ignoreId)[0];
+  return timeClash ? describeConflict(db, timeClash) : null;
+}
+
 // A scheduled session is "done" once a session record (psr) exists for the
 // same visit: same date, beneficiary and facilitator. Such a schedule entry
 // is locked against editing so the record it produced can't drift out of
@@ -217,9 +266,9 @@ export default function ScheduleScreen() {
     setStep(2);
   }
 
-  function confirmAndSaveAll() {
-    const ids = nextIds('SCH', 'schedule', generatedDates.length);
-    generatedDates.forEach((date, i) => {
+  function saveDates(dates, skippedCount = 0) {
+    const ids = nextIds('SCH', 'schedule', dates.length);
+    dates.forEach((date, i) => {
       addRecord('schedule', {
         id: ids[i],
         beneficiaryId,
@@ -232,9 +281,46 @@ export default function ScheduleScreen() {
     });
     Alert.alert(
       'Schedule saved',
-      `${generatedDates.length} session(s) added to the calendar.`,
+      `${dates.length} session(s) added to the calendar.` +
+        (skippedCount > 0 ? ` ${skippedCount} date(s) skipped because of time clashes.` : ''),
       [{ text: 'OK', onPress: closeAdd }],
       { cancelable: false }
+    );
+  }
+
+  function confirmAndSaveAll() {
+    const chosenAssistant = assistantId === NO_ASSISTANT ? null : assistantId;
+    // Check every generated date against what's already on the schedule.
+    const clashes = generatedDates
+      .map((date) => ({
+        date,
+        msg: scheduleClash(db, { date, time, beneficiaryId, facilitatorId, assistantId: chosenAssistant }),
+      }))
+      .filter((x) => x.msg);
+
+    if (clashes.length === 0) {
+      saveDates(generatedDates);
+      return;
+    }
+
+    const clashDates = new Set(clashes.map((x) => x.date));
+    const clearDates = generatedDates.filter((d) => !clashDates.has(d));
+    const preview = clashes
+      .slice(0, 3)
+      .map((x) => `${x.date}: ${x.msg}`)
+      .join('\n');
+    const more = clashes.length > 3 ? `\n+ ${clashes.length - 3} more` : '';
+    const buttons = [{ text: 'Cancel', style: 'cancel' }];
+    if (clearDates.length > 0) {
+      buttons.push({
+        text: `Save the other ${clearDates.length}`,
+        onPress: () => saveDates(clearDates, clashes.length),
+      });
+    }
+    Alert.alert(
+      'Schedule clash',
+      `${clashes.length} of ${generatedDates.length} date(s) clash with an existing session. A beneficiary can have only one session a day, and a person can't have two sessions starting within ${SESSION_MINUTES} minutes:\n\n${preview}${more}`,
+      buttons
     );
   }
 
@@ -279,6 +365,23 @@ export default function ScheduleScreen() {
     }
     if (parseTimeToMinutes(editTime) == null) {
       return Alert.alert('Check the time', 'Enter a time like 10:00 or 10:00 AM.');
+    }
+    const clash = scheduleClash(
+      db,
+      {
+        date: editDate,
+        time: editTime.trim(),
+        beneficiaryId: editBeneficiaryId,
+        facilitatorId: editFacilitatorId,
+        assistantId: editAssistantId === NO_ASSISTANT ? null : editAssistantId,
+      },
+      editingId
+    );
+    if (clash) {
+      return Alert.alert(
+        'Schedule clash',
+        `${clash}. A beneficiary can have only one session a day, and a person can't have two sessions starting within ${SESSION_MINUTES} minutes.`
+      );
     }
     setSavingEdit(true);
     try {

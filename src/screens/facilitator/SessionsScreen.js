@@ -71,6 +71,40 @@ function isAssistantOnlyCheckIn(db, a) {
   );
 }
 
+// First problem with a new session record, as a message, or null:
+//  1. a beneficiary can have only one session record on a given day (any
+//     facilitator);
+//  2. a person (facilitator or assistant) can't have two session records
+//     whose time in/out ranges overlap on the same day -- nobody can be in
+//     two places at once.
+function psrClash(db, { date, beneficiaryId, facilitatorId, assistantId, timeIn, timeOut }) {
+  const sameDay = db.psr.find((p) => p.date === date && p.beneficiaryId === beneficiaryId);
+  if (sameDay) {
+    const b = db.beneficiaries.find((x) => x.id === beneficiaryId);
+    const f = db.resources.find((x) => x.id === sameDay.facilitatorId);
+    return `${b ? `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}` : 'This beneficiary'} already has a session record for ${date}${f ? ` (${f.name})` : ''}.`;
+  }
+  const s = parseTimeToMinutes(timeIn);
+  const e = parseTimeToMinutes(timeOut);
+  if (s == null || e == null || e <= s) return null;
+  const people = [facilitatorId, assistantId].filter(Boolean);
+  const overlap = db.psr.find((p) => {
+    if (p.date !== date) return false;
+    if (!people.some((id) => id === p.facilitatorId || id === p.assistantId)) return false;
+    const os = parseTimeToMinutes(p.timeIn);
+    const oe = parseTimeToMinutes(p.timeOut);
+    return os != null && oe != null && oe > os && s < oe && os < e;
+  });
+  if (overlap) {
+    const who = people
+      .filter((id) => id === overlap.facilitatorId || id === overlap.assistantId)
+      .map((id) => db.resources.find((r) => r.id === id)?.name || id)
+      .join(' & ');
+    return `${who} already has a session record from ${overlap.timeIn} to ${overlap.timeOut} on ${date}, which overlaps this one.`;
+  }
+  return null;
+}
+
 // ---- Small building blocks -------------------------------------------------
 
 // Round "+" button shown at the top-right of the list. `badge` (optional) is
@@ -469,6 +503,15 @@ function CompleteCheckIn({ attendanceRecord, onSaved }) {
   async function save() {
     const problem = validateSession(f, attendanceRecord.date);
     if (problem) return Alert.alert(problem[0], problem[1]);
+    const clash = psrClash(db, {
+      date: attendanceRecord.date,
+      beneficiaryId: attendanceRecord.beneficiaryId,
+      facilitatorId: attendanceRecord.facilitatorId,
+      assistantId: f.assistantId === NO_ASSISTANT ? null : f.assistantId,
+      timeIn: f.timeIn,
+      timeOut: f.timeOut,
+    });
+    if (clash) return Alert.alert('Session clash', clash);
     setSaving(true);
     try {
       await addRecord('psr', {
@@ -581,6 +624,15 @@ export default function SessionsScreen() {
     }
     const problem = validateSession(manual, today);
     if (problem) return Alert.alert(problem[0], problem[1]);
+    const clash = psrClash(db, {
+      date: today,
+      beneficiaryId,
+      facilitatorId: currentUser.id,
+      assistantId: manual.assistantId === NO_ASSISTANT ? null : manual.assistantId,
+      timeIn: manual.timeIn,
+      timeOut: manual.timeOut,
+    });
+    if (clash) return Alert.alert('Session clash', clash);
     try {
       await addRecord('psr', {
         id: nextId('PSR', 'psr'),
