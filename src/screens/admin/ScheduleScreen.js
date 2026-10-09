@@ -42,6 +42,19 @@ function assistantOptions(facilitators, excludeId) {
   ];
 }
 
+// A scheduled session is "done" once a session record (psr) exists for the
+// same visit: same date, beneficiary and facilitator. Such a schedule entry
+// is locked against editing so the record it produced can't drift out of
+// step with it.
+function hasSession(db, sched) {
+  return db.psr.some(
+    (p) =>
+      p.date === sched.date &&
+      p.beneficiaryId === sched.beneficiaryId &&
+      p.facilitatorId === sched.facilitatorId
+  );
+}
+
 function generateDates(startDate, endDate, dayOfWeek, frequency) {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -236,6 +249,10 @@ export default function ScheduleScreen() {
   const [savingEdit, setSavingEdit] = useState(false);
 
   function startEdit(sess) {
+    if (hasSession(db, sess)) {
+      Alert.alert('Session already recorded', 'This schedule entry cannot be edited because a session record already exists for it.');
+      return;
+    }
     setEditingId(sess.id);
     setEditBeneficiaryId(sess.beneficiaryId);
     setEditFacilitatorId(sess.facilitatorId);
@@ -246,6 +263,11 @@ export default function ScheduleScreen() {
   }
 
   async function saveEdit() {
+    const current = db.schedule.find((x) => x.id === editingId);
+    if (current && hasSession(db, current)) {
+      setEditingId(null);
+      return Alert.alert('Session already recorded', 'This schedule entry cannot be edited because a session record already exists for it.');
+    }
     if (!editBeneficiaryId) return Alert.alert('Beneficiary required', 'Select a beneficiary.');
     if (!editFacilitatorId) return Alert.alert('Facilitator required', 'Select a facilitator.');
     if (editAssistantId !== NO_ASSISTANT && editAssistantId === editFacilitatorId) {
@@ -399,6 +421,7 @@ export default function ScheduleScreen() {
             const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
             const f = db.resources.find((x) => x.id === s.facilitatorId);
             const asst = s.assistantId ? db.resources.find((x) => x.id === s.assistantId) : null;
+            const locked = hasSession(db, s);
             const c = db.categories.find((x) => x.id === s.categoryId);
 
             if (editingId === s.id) {
@@ -464,6 +487,11 @@ export default function ScheduleScreen() {
                         Assistant: {asst.name}
                       </Text>
                     )}
+                    {locked && (
+                      <Text style={{ color: colors.textMuted, fontSize: 12, fontStyle: 'italic' }}>
+                        Session recorded -- editing locked
+                      </Text>
+                    )}
                     {c && (
                       <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                         {c.pillar} / {c.topic}
@@ -471,7 +499,12 @@ export default function ScheduleScreen() {
                     )}
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                    <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(s)} />
+                    <IconButton
+                      name={locked ? 'lock-closed-outline' : 'create-outline'}
+                      color={locked ? colors.textMuted : colors.primary}
+                      label={locked ? 'Edit locked' : 'Edit'}
+                      onPress={() => startEdit(s)}
+                    />
                     <IconButton
                       name="trash-outline"
                       color={colors.red}

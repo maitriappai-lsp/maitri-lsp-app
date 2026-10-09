@@ -107,39 +107,6 @@ function nowHHMM() {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-// Great-circle distance between two lat/lng points, in metres.
-function distanceMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const toRad = (x) => (x * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-// Android (and iOS) can deliver an Exit event that doesn't reflect a real
-// departure -- e.g. a poor/coarse location fix once the app is no longer in
-// the foreground. So before timing anyone out, take one fresh reading and
-// only proceed if the phone really is outside the region. If a reading
-// can't be obtained within a few seconds, fall back to trusting the Exit
-// event (the previous behaviour), so a real exit is never silently missed.
-async function confirmOutsideRegion(region) {
-  if (region?.latitude == null || region?.longitude == null || !region?.radius) {
-    return { known: false, reason: 'region has no coordinates/radius' };
-  }
-  try {
-    const pos = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('position timeout')), 10000)),
-    ]);
-    const d = distanceMeters(pos.coords.latitude, pos.coords.longitude, region.latitude, region.longitude);
-    return { known: true, inside: d <= region.radius, distance: Math.round(d), accuracy: Math.round(pos.coords.accuracy || 0) };
-  } catch (e) {
-    return { known: false, reason: e?.message || String(e) };
-  }
-}
-
 TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
   if (error) {
     await logDebug(`task error: ${error.message}`);
@@ -182,19 +149,7 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
       );
       return;
     }
-    const check = await confirmOutsideRegion(region);
-    if (check.known && check.inside) {
-      await logDebug(
-        `skipped: Exit event received, but a fresh reading puts the phone ${check.distance}m from the centre (radius ${region.radius}m, accuracy ${check.accuracy}m) -- still inside, not timing out`
-      );
-      return;
-    }
-    await logDebug(
-      check.known
-        ? `Exit confirmed: ${check.distance}m from centre (radius ${region.radius}m, accuracy ${check.accuracy}m)`
-        : `could not confirm position (${check.reason}) -- trusting the Exit event`
-    );
-    await logDebug(`open record found (id=${record.id}) -- finalizing time out now`);
+    await logDebug(`open record found (id=${record.id}) -- finalizing time out now (no artificial delay -- see file header)`);
 
     // No sleep/re-check here on purpose: real-device testing showed a
     // background task can be suspended by the OS mid-wait, before it ever

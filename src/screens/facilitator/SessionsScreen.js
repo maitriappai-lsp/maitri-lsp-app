@@ -59,6 +59,18 @@ function assistantOptions(db, facilitatorId) {
   ];
 }
 
+// A check-in where this person was only the ASSISTANT on the schedule (the
+// same date + beneficiary is scheduled with them as assistantId, and not as
+// facilitatorId). Their attendance still counts, but the session record is
+// filed by the main facilitator, so these are left out of the session forms.
+function isAssistantOnlyCheckIn(db, a) {
+  const sameVisit = db.schedule.filter((s) => s.date === a.date && s.beneficiaryId === a.beneficiaryId);
+  return (
+    sameVisit.some((s) => s.assistantId === a.facilitatorId) &&
+    !sameVisit.some((s) => s.facilitatorId === a.facilitatorId)
+  );
+}
+
 // ---- Small building blocks -------------------------------------------------
 
 // Round "+" button shown at the top-right of the list. `badge` (optional) is
@@ -524,16 +536,19 @@ export default function SessionsScreen() {
   const { db, addRecord, nextId } = useData();
   const today = todayLocalYMD();
 
-  const pendingCheckIns = db.attendance.filter(
-    (a) =>
-      a.facilitatorId === currentUser?.id &&
-      a.date === today &&
-      !db.psr.some((p) => p.attendanceId === a.id)
-  );
-
-  const hasAttendanceToday = db.attendance.some(
+  const myAttendanceToday = db.attendance.filter(
     (a) => a.facilitatorId === currentUser?.id && a.date === today
   );
+  // Only check-ins as the main facilitator (or an unscheduled visit) can get
+  // a session record; assistant-only check-ins can't.
+  const sessionEligibleToday = myAttendanceToday.filter((a) => !isAssistantOnlyCheckIn(db, a));
+  const assistantOnlyToday = myAttendanceToday.length - sessionEligibleToday.length;
+
+  const pendingCheckIns = sessionEligibleToday.filter(
+    (a) => !db.psr.some((p) => p.attendanceId === a.id)
+  );
+
+  const hasAttendanceToday = sessionEligibleToday.length > 0;
 
   const [showAdd, setShowAdd] = useState(false);
   const [tab, setTab] = useState(pendingCheckIns.length > 0 ? 'checkins' : 'manual');
@@ -596,6 +611,12 @@ export default function SessionsScreen() {
           badge={pendingCheckIns.length}
         />
 
+        {assistantOnlyToday > 0 && (
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
+            You checked in as an assistant today -- the main facilitator files the session record for that visit.
+          </Text>
+        )}
+
         {pendingCheckIns.length > 0 && (
           <TouchableOpacity onPress={openAdd} activeOpacity={0.8}>
             <Card style={{ borderColor: colors.amber }}>
@@ -649,8 +670,9 @@ export default function SessionsScreen() {
               {!hasAttendanceToday ? (
                 <Card>
                   <Text style={{ color: colors.textMuted }}>
-                    You haven't marked attendance today. Check in on the Attendance screen first -- a session record
-                    can't be logged for a day with no attendance behind it.
+                    {assistantOnlyToday > 0
+                      ? "You checked in as an assistant today. Session records are filed by the main facilitator, so there's nothing for you to log."
+                      : "You haven't marked attendance today. Check in on the Attendance screen first -- a session record can't be logged for a day with no attendance behind it."}
                   </Text>
                 </Card>
               ) : (

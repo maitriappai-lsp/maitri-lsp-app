@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { Text, Alert, KeyboardAvoidingView, Platform, Image, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../data/store';
+import { apiPost } from '../data/api';
 import { Screen, Card, Field, PrimaryButton, SecondaryButton } from '../components/UI';
 import { colors, spacing } from '../theme';
 
@@ -16,6 +17,48 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [pendingUser, setPendingUser] = useState(null); // set when mustChangePassword
   const [newPassword, setNewPassword] = useState('');
+
+  // "Change password" from the sign-in screen (no sign-in needed: the
+  // current password proves who it is).
+  const [changing, setChanging] = useState(false);
+  const [cpPhone, setCpPhone] = useState('');
+  const [cpCurrent, setCpCurrent] = useState('');
+  const [cpNew, setCpNew] = useState('');
+  const [cpConfirm, setCpConfirm] = useState('');
+  const [cpBusy, setCpBusy] = useState(false);
+
+  function openChangePassword() {
+    setCpPhone(phone);
+    setCpCurrent('');
+    setCpNew('');
+    setCpConfirm('');
+    setChanging(true);
+  }
+
+  async function handleChangePassword() {
+    if (!cpPhone.trim() || !cpCurrent || !cpNew || !cpConfirm) {
+      return Alert.alert('Missing details', 'Fill in all four fields.');
+    }
+    if (cpNew.length < 6) return Alert.alert('Password too short', 'Use at least 6 characters.');
+    if (cpNew !== cpConfirm) return Alert.alert('Passwords do not match', 'Re-enter the new password in both fields.');
+    if (cpNew === cpCurrent) return Alert.alert('Choose a different password', 'The new password must differ from the current one.');
+    setCpBusy(true);
+    try {
+      await apiPost('/api/auth/change-password-with-old', {
+        phone: cpPhone.trim(),
+        currentPassword: cpCurrent,
+        newPassword: cpNew,
+      });
+      setPhone(cpPhone.trim());
+      setPassword('');
+      setChanging(false);
+      Alert.alert('Password changed', 'Sign in with your new password.');
+    } catch (e) {
+      Alert.alert('Could not change password', e.message || 'Please try again.');
+    } finally {
+      setCpBusy(false);
+    }
+  }
 
   async function handleSignIn() {
     const result = await login(phone.trim(), password);
@@ -71,6 +114,71 @@ export default function LoginScreen() {
     );
   }
 
+  if (changing) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        enabled={Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Screen style={{ justifyContent: 'center' }}>
+          <View style={{ alignItems: 'center', marginBottom: spacing.lg }}>
+            <Image
+              source={require('../../assets/logo.png')}
+              style={{ width: 160, height: 57 }}
+              resizeMode="contain"
+            />
+          </View>
+          <Card>
+            <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: spacing.xs, color: colors.text }}>
+              Change password
+            </Text>
+            <Text style={{ color: colors.textMuted, marginBottom: spacing.md }}>
+              Enter your phone number and current password, then choose a new one.
+            </Text>
+            <Field
+              label="Phone number"
+              keyboardType="phone-pad"
+              value={cpPhone}
+              onChangeText={setCpPhone}
+              placeholder="98400 1XXXX"
+            />
+            <Field
+              label="Current password"
+              secureTextEntry
+              value={cpCurrent}
+              onChangeText={setCpCurrent}
+            />
+            <Field
+              label="New password"
+              secureTextEntry
+              value={cpNew}
+              onChangeText={setCpNew}
+              placeholder="At least 6 characters"
+            />
+            <Field
+              label="Confirm new password"
+              secureTextEntry
+              value={cpConfirm}
+              onChangeText={setCpConfirm}
+            />
+            <PrimaryButton
+              title={cpBusy ? 'Saving...' : 'Change password'}
+              onPress={handleChangePassword}
+              disabled={cpBusy}
+            />
+            <SecondaryButton
+              title="Back to sign in"
+              onPress={() => setChanging(false)}
+              disabled={cpBusy}
+              style={{ marginTop: spacing.md }}
+            />
+          </Card>
+        </Screen>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -108,6 +216,11 @@ export default function LoginScreen() {
             placeholder="••••••••"
           />
           <PrimaryButton title="Sign in" onPress={handleSignIn} />
+          <SecondaryButton
+            title="Change password"
+            onPress={openChangePassword}
+            style={{ marginTop: spacing.md }}
+          />
           <SecondaryButton
             title="Forgot password? Contact your Admin"
             onPress={() =>

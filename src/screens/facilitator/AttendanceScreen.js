@@ -65,7 +65,12 @@ export default function AttendanceScreen() {
   const today = todayLocalYMD();
 
   const todaysSchedule = useMemo(
-    () => db.schedule.filter((s) => s.facilitatorId === currentUser?.id && s.date === today),
+    // Sessions where I'm the main facilitator OR the assistant -- either way
+    // it's a scheduled visit for me, not an ad-hoc one.
+    () =>
+      db.schedule.filter(
+        (s) => (s.facilitatorId === currentUser?.id || s.assistantId === currentUser?.id) && s.date === today
+      ),
     [db.schedule, currentUser?.id, today]
   );
 
@@ -98,8 +103,18 @@ export default function AttendanceScreen() {
 
   const stateRef = useRef({});
   useEffect(() => {
-    stateRef.current = { timeIn, timeOut, checkedInGeoId, saving };
-  }, [timeIn, timeOut, checkedInGeoId, saving]);
+    stateRef.current = { timeIn, timeOut, checkedInGeoId, saving, attendanceRecordId, geo: db.geo };
+  }, [timeIn, timeOut, checkedInGeoId, saving, attendanceRecordId, db.geo]);
+
+  // Follow the saved record: if the background task (or another device)
+  // timed this session out while the app was away, pick that up as soon as
+  // the data refreshes, so the screen switches to "attendance complete"
+  // instead of still offering "Mark time out".
+  useEffect(() => {
+    if (!attendanceRecordId) return;
+    const rec = db.attendance.find((a) => a.id === attendanceRecordId);
+    if (rec?.timeOut && rec.timeOut !== timeOut) setTimeOut(rec.timeOut);
+  }, [db.attendance, attendanceRecordId]);
 
   const outsideSinceRef = useRef(null);
   const autoActionInFlightRef = useRef(false);
@@ -143,7 +158,7 @@ export default function AttendanceScreen() {
         (pos) => {
           const s = stateRef.current;
           if (!s.timeIn || s.timeOut) return; // only watching for exit while a session is open
-          const match = findGeofenceMatch(db.geo, pos.coords.latitude, pos.coords.longitude);
+          const match = findGeofenceMatch(s.geo || [], pos.coords.latitude, pos.coords.longitude);
           const stillInside = !!match && match.id === s.checkedInGeoId;
           if (stillInside) {
             outsideSinceRef.current = null;
@@ -315,10 +330,20 @@ export default function AttendanceScreen() {
   }
 
   async function markTimeOut({ auto = false } = {}) {
+    // Called from the location watcher too, which was set up on first mount,
+    // so read the record id from the ref rather than this render's state.
+    const recordId = stateRef.current.attendanceRecordId || attendanceRecordId;
+    if (!recordId) return;
+    // Already timed out (e.g. by the background task)? Don't overwrite it.
+    const existing = db.attendance.find((a) => a.id === recordId);
+    if (existing?.timeOut) {
+      setTimeOut(existing.timeOut);
+      return;
+    }
     setSaving(true);
     try {
       const value = nowHHMM();
-      await updateRecord('attendance', attendanceRecordId, { timeOut: value });
+      await updateRecord('attendance', recordId, { timeOut: value });
       setTimeOut(value);
       if (auto) {
         Alert.alert('Timed out automatically', `You moved out of the geofence, so time out was marked at ${value}.`);
@@ -421,9 +446,11 @@ export default function AttendanceScreen() {
             <SectionLabel>Scheduled for you today</SectionLabel>
             {todaysSchedule.map((s) => {
               const b = getBeneficiary(s.beneficiaryId);
+              const assisting = s.assistantId === currentUser?.id && s.facilitatorId !== currentUser?.id;
               return (
                 <Text key={s.id} style={{ color: colors.textMuted, fontSize: 12 }}>
                   {s.time} -- {b?.school} {b?.class} {b?.section}
+                  {assisting ? ' (assisting)' : ''}
                 </Text>
               );
             })}

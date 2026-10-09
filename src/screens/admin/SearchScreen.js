@@ -67,6 +67,7 @@ function friendlyKey(key) {
 const FK_RESOLVERS = {
   beneficiaryId: beneficiaryLabel,
   facilitatorId: resourceName,
+  assistantId: resourceName,
   resourceId: resourceName,
   loggedBy: resourceName,
   overriddenBy: resourceName,
@@ -119,7 +120,14 @@ const TABLE_CONFIGS = [
     label: 'Schedule',
     dateField: 'date',
     searchText: (r, db) =>
-      [beneficiaryLabel(db, r.beneficiaryId), resourceName(db, r.facilitatorId), r.date, r.time, categoryLabel(db, r.categoryId)]
+      [
+        beneficiaryLabel(db, r.beneficiaryId),
+        resourceName(db, r.facilitatorId),
+        r.assistantId && resourceName(db, r.assistantId),
+        r.date,
+        r.time,
+        categoryLabel(db, r.categoryId),
+      ]
         .filter(Boolean)
         .join(' '),
     summary: (r, db) => `${beneficiaryLabel(db, r.beneficiaryId)} \u00b7 ${resourceName(db, r.facilitatorId)} \u00b7 ${r.date} ${r.time || ''}`,
@@ -133,6 +141,7 @@ const TABLE_CONFIGS = [
       [
         beneficiaryLabel(db, r.beneficiaryId),
         resourceName(db, r.facilitatorId),
+        r.assistantId && resourceName(db, r.assistantId),
         r.date,
         categoryLabel(db, r.categoryId),
         r.rating,
@@ -276,6 +285,8 @@ export default function SearchScreen() {
       { childDbKey: 'attendance', childField: 'facilitatorId', label: 'Attendance' },
       { childDbKey: 'schedule', childField: 'facilitatorId', label: 'Schedule' },
       { childDbKey: 'psr', childField: 'facilitatorId', label: 'Sessions' },
+      { childDbKey: 'schedule', childField: 'assistantId', label: 'Schedule (as assistant)' },
+      { childDbKey: 'psr', childField: 'assistantId', label: 'Sessions (as assistant)' },
       { childDbKey: 'uploads', childField: 'facilitatorId', label: 'Uploads' },
       { childDbKey: 'content', childField: 'uploadedBy', label: 'Content (uploaded by)' },
     ],
