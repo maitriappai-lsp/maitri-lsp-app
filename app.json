@@ -57,7 +57,8 @@
         {
           "cameraPermission": "Allow Maitri LSP to use the camera for facial attendance check."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

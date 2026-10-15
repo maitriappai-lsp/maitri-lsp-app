@@ -2,20 +2,55 @@
 // Phone + password sign-in, forced password change on first login, and a
 // stubbed "forgot password" flow (real version should trigger an
 // Admin-mediated reset per the spec, since there is no self-signup).
-import React, { useState } from 'react';
-import { Text, Alert, KeyboardAvoidingView, Platform, Image, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Text, Alert, KeyboardAvoidingView, Platform, Image, View, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../data/store';
 import { apiPost } from '../data/api';
 import { Screen, Card, Field, PrimaryButton, SecondaryButton } from '../components/UI';
 import { colors, spacing } from '../theme';
 
+// "Remember me on this phone": when ticked, the phone number and password
+// are kept in the phone's encrypted secure storage (Android Keystore / iOS
+// Keychain -- not plain AsyncStorage) and pre-filled on this screen next
+// time. Untick it on a shared phone. LAST_PHONE_KEY is the fallback that
+// only remembers the phone number.
+const SAVED_LOGIN_KEY = 'maitri-lsp-saved-login';
+const LAST_PHONE_KEY = 'maitri-lsp-last-phone';
+
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, restoreStatus } = useAuth();
   const { changePassword } = useData();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [pendingUser, setPendingUser] = useState(null); // set when mustChangePassword
+
+  const [remember, setRemember] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await SecureStore.getItemAsync(SAVED_LOGIN_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          setPhone((current) => current || saved.phone || '');
+          setPassword((current) => current || saved.password || '');
+          setRemember(true);
+          return;
+        }
+      } catch (e) {
+        // Fall through to the phone-number-only memory below.
+      }
+      try {
+        const lastPhone = await AsyncStorage.getItem(LAST_PHONE_KEY);
+        if (lastPhone) setPhone((current) => current || lastPhone);
+      } catch (e) {
+        // Not worth surfacing.
+      }
+    })();
+  }, []);
   const [newPassword, setNewPassword] = useState('');
 
   // "Change password" from the sign-in screen (no sign-in needed: the
@@ -51,6 +86,9 @@ export default function LoginScreen() {
       });
       setPhone(cpPhone.trim());
       setPassword('');
+      // The remembered password is out of date now; it's saved again on the
+      // next successful sign-in if "Remember me" is still ticked.
+      SecureStore.deleteItemAsync(SAVED_LOGIN_KEY).catch(() => {});
       setChanging(false);
       Alert.alert('Password changed', 'Sign in with your new password.');
     } catch (e) {
@@ -65,6 +103,12 @@ export default function LoginScreen() {
     if (!result.ok) {
       Alert.alert('Sign in failed', result.error);
       return;
+    }
+    AsyncStorage.setItem(LAST_PHONE_KEY, phone.trim()).catch(() => {});
+    if (remember) {
+      SecureStore.setItemAsync(SAVED_LOGIN_KEY, JSON.stringify({ phone: phone.trim(), password })).catch(() => {});
+    } else {
+      SecureStore.deleteItemAsync(SAVED_LOGIN_KEY).catch(() => {});
     }
     if (result.user.mustChangePassword) {
       setPendingUser(result.user);
@@ -207,6 +251,9 @@ export default function LoginScreen() {
             value={phone}
             onChangeText={setPhone}
             placeholder="98400 1XXXX"
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
           />
           <Field
             label="Password"
@@ -214,7 +261,19 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             placeholder="••••••••"
+            autoComplete="current-password"
+            textContentType="password"
+            importantForAutofill="yes"
           />
+          <TouchableOpacity
+            onPress={() => setRemember((r) => !r)}
+            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}
+          >
+            <Text style={{ fontSize: 20, color: colors.primary, marginRight: spacing.sm }}>
+              {remember ? '\u2611' : '\u2610'}
+            </Text>
+            <Text style={{ color: colors.text }}>Remember me on this phone</Text>
+          </TouchableOpacity>
           <PrimaryButton title="Sign in" onPress={handleSignIn} />
           <SecondaryButton
             title="Change password"
@@ -232,6 +291,10 @@ export default function LoginScreen() {
             style={{ marginTop: spacing.md, borderColor: 'transparent' }}
           />
         </Card>
+        {/* TEMPORARY diagnostic -- remove once the saved sign-in is confirmed working. */}
+        <Text style={{ color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: spacing.sm }}>
+          Session check: {restoreStatus}
+        </Text>
        
       </Screen>
     </KeyboardAvoidingView>

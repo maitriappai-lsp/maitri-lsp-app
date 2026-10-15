@@ -17,6 +17,10 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  // TEMPORARY diagnostic, shown in small text on the sign-in screen: what the
+  // app found in storage when it started ('checking' | 'restored' |
+  // 'no-saved-session' | 'error: ...'), then 'signed-in' / 'signed-out'.
+  const [restoreStatus, setRestoreStatus] = useState('checking');
 
   // Restore a previous session on app start.
   useEffect(() => {
@@ -27,9 +31,13 @@ export function AuthProvider({ children }) {
           const { token, user } = JSON.parse(raw);
           setAuthToken(token);
           setCurrentUser(user);
+          setRestoreStatus('restored');
+        } else {
+          setRestoreStatus('no-saved-session');
         }
       } catch (e) {
         console.warn('Failed to restore session', e);
+        setRestoreStatus(`error: ${e?.message || e}`);
       } finally {
         setAuthReady(true);
       }
@@ -42,6 +50,7 @@ export function AuthProvider({ children }) {
       setAuthToken(token);
       setCurrentUser(user);
       await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ token, user }));
+      setRestoreStatus('signed-in');
       return { ok: true, user };
     } catch (e) {
       return { ok: false, error: e.message || 'Sign in failed.' };
@@ -52,10 +61,11 @@ export function AuthProvider({ children }) {
     setAuthToken(null);
     setCurrentUser(null);
     await AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
+    setRestoreStatus('signed-out');
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, authReady, login, logout }}>
+    <AuthContext.Provider value={{ currentUser, authReady, login, logout, restoreStatus }}>
       {children}
     </AuthContext.Provider>
   );

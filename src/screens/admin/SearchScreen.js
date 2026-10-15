@@ -469,7 +469,7 @@ export default function SearchScreen() {
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
         <Text style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
-          Showing {filtered.length} of {allRows.length} total \u00b7 {selectedIds.size} selected
+          Showing {filtered.length} of {allRows.length} total {'\u00b7'} {selectedIds.size} selected
         </Text>
         <TouchableOpacity onPress={selectedIds.size > 0 ? clearSelection : selectAllShown}>
           <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>

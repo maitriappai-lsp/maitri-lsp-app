@@ -4,7 +4,7 @@
 // on any PSR/attendance/upload record from the drill-down.
 // Row actions (edit / delete / view) are compact icons.
 import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, View, Alert, TouchableOpacity, Linking } from 'react-native';
+import { ScrollView, Text, View, Alert, TouchableOpacity, Linking, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -32,6 +32,19 @@ function IconButton({ name, color, label, onPress, size = 22 }) {
       <Ionicons name={name} size={size} color={color} />
     </TouchableOpacity>
   );
+}
+
+// The assistant is optional. Select needs a real value for every option, so
+// "no assistant" is this sentinel in the UI, converted to null on save. The
+// session's own facilitator is left out of the options.
+const NO_ASSISTANT = 'NONE';
+function assistantOptions(db, facilitatorId) {
+  return [
+    { value: NO_ASSISTANT, label: 'None' },
+    ...db.resources
+      .filter((r) => r.role === 'Facilitator' && r.id !== facilitatorId)
+      .map((r) => ({ value: r.id, label: r.name })),
+  ];
 }
 
 export default function AdminDashboardScreen() {
@@ -98,6 +111,7 @@ export default function AdminDashboardScreen() {
   const [editPsrBeneficiaryId, setEditPsrBeneficiaryId] = useState(null);
   const [editPsrDate, setEditPsrDate] = useState('');
   const [editPsrCategoryId, setEditPsrCategoryId] = useState(null);
+  const [editPsrAssistantId, setEditPsrAssistantId] = useState(NO_ASSISTANT);
   const [editPsrTimeIn, setEditPsrTimeIn] = useState('');
   const [editPsrTimeOut, setEditPsrTimeOut] = useState('');
   const [editPsrStudents, setEditPsrStudents] = useState('');
@@ -115,6 +129,7 @@ export default function AdminDashboardScreen() {
     setEditPsrBeneficiaryId(p.beneficiaryId);
     setEditPsrDate(p.date);
     setEditPsrCategoryId(p.categoryId);
+    setEditPsrAssistantId(p.assistantId || NO_ASSISTANT);
     setEditPsrTimeIn(p.timeIn || '');
     setEditPsrTimeOut(p.timeOut || '');
     setEditPsrStudents(String(p.studentsPresent ?? ''));
@@ -170,6 +185,7 @@ export default function AdminDashboardScreen() {
         date: editPsrDate,
         attendanceId: matchingAttendance.id,
         categoryId: editPsrCategoryId,
+        assistantId: editPsrAssistantId === NO_ASSISTANT ? null : editPsrAssistantId,
         timeIn: editPsrTimeIn,
         timeOut: editPsrTimeOut,
         studentsPresent: Number(editPsrStudents) || 0,
@@ -364,15 +380,52 @@ export default function AdminDashboardScreen() {
           sessions.map((p) => {
             const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
             const f = db.resources.find((x) => x.id === p.facilitatorId);
+            const sessionAssistant = p.assistantId ? db.resources.find((x) => x.id === p.assistantId) : null;
             const cat = db.categories.find((x) => x.id === p.categoryId);
             const isOpen = expandedId === p.id;
 
-            if (editingPsrId === p.id) {
-              return (
-                <Card key={p.id}>
-                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.sm }}>
-                    Editing session -- {b?.school}
-                  </Text>
+            // The edit form lives in a bottom-sheet Modal (same pattern as the
+            // Sessions and Schedule screens) instead of replacing the row in
+            // place. In place, the fixed header above the list (dates, filters,
+            // tabs, export button) left almost no room for the form once the
+            // keyboard opened, and the keyboard kept flickering on text fields.
+            const editModal =
+              editingPsrId === p.id ? (
+                <Modal visible animationType="slide" transparent onRequestClose={() => setEditingPsrId(null)}>
+                  <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    enabled={Platform.OS === 'ios'}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                  >
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }}>
+                      <View
+                        style={{
+                          backgroundColor: colors.bg,
+                          borderTopLeftRadius: 16,
+                          borderTopRightRadius: 16,
+                          padding: spacing.lg,
+                          maxHeight: '92%',
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: spacing.md,
+                          }}
+                        >
+                          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, flex: 1, marginRight: spacing.sm }}>
+                            Editing session -- {b?.school}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => setEditingPsrId(null)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Text style={{ color: colors.textMuted, fontSize: 15, fontWeight: '700' }}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                   <Select
                     label="Beneficiary"
                     value={editPsrBeneficiaryId}
@@ -391,6 +444,12 @@ export default function AdminDashboardScreen() {
                       value: c.id,
                       label: `${c.pillar} / ${c.topic}${c.subtopic !== 'OTHERS' ? ' / ' + c.subtopic : ''}`,
                     }))}
+                  />
+                  <Select
+                    label="Assistant (optional)"
+                    value={editPsrAssistantId}
+                    onSelect={setEditPsrAssistantId}
+                    options={assistantOptions(db, p.facilitatorId)}
                   />
                   <View style={{ flexDirection: 'row', gap: spacing.md }}>
                     <View style={{ flex: 1 }}>
@@ -468,12 +527,17 @@ export default function AdminDashboardScreen() {
                     disabled={savingPsr}
                   />
                   <SecondaryButton title="Cancel" onPress={() => setEditingPsrId(null)} style={{ marginTop: spacing.sm }} />
-                </Card>
-              );
-            }
+                          <View style={{ height: spacing.xl }} />
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </KeyboardAvoidingView>
+                </Modal>
+              ) : null;
 
             return (
-              <TouchableOpacity key={p.id} onPress={() => setExpandedId(isOpen ? null : p.id)}>
+              <React.Fragment key={p.id}>
+              <TouchableOpacity onPress={() => setExpandedId(isOpen ? null : p.id)}>
                 <Card>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ fontWeight: '700', color: colors.text }}>{b?.school}</Text>
@@ -484,6 +548,7 @@ export default function AdminDashboardScreen() {
                   </Text>
                   {isOpen && (
                     <View style={{ marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm }}>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Assistant: {sessionAssistant?.name || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time in: {p.timeIn || '--'}   Time out: {p.timeOut || '--'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
@@ -513,6 +578,8 @@ export default function AdminDashboardScreen() {
                   )}
                 </Card>
               </TouchableOpacity>
+              {editModal}
+              </React.Fragment>
             );
           })}
 
