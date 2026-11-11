@@ -27,21 +27,76 @@ import { todayLocalYMD } from '../../utils/date';
 import { Screen, Card, Chip, Field, Select, PrimaryButton, SecondaryButton, SectionLabel, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
-const TABS = ['Resources', 'Geo', 'Beneficiaries', 'Life Skills', 'System Parameters'];
+const TABS = [
+  { key: 'Resources', label: 'Resources', icon: 'briefcase-outline' },
+  { key: 'Geo', label: 'Geo', icon: 'location-outline' },
+  { key: 'Beneficiaries', label: 'Beneficiaries', icon: 'people-outline' },
+  { key: 'Life Skills', label: 'Life Skills', icon: 'school-outline' },
+  { key: 'System Parameters', label: 'Settings', icon: 'settings-outline' },
+];
 
 export default function MastersScreen() {
   const [tab, setTab] = useState('Resources');
 
-  return (
+ return (
     <Screen>
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.sm }}>
         Masters
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }} contentContainerStyle={{ flexDirection: 'row' }}>
-        {TABS.map((t) => (
-          <Chip key={t} label={t} active={tab === t} onPress={() => setTab(t)} />
-        ))}
-      </ScrollView>
+
+      {/* Two-row tab navigation */}
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          marginBottom: spacing.md,
+        }}
+      >
+        {TABS.map((item) => {
+          const active = tab === item.key;
+
+          return (
+            <TouchableOpacity
+              key={item.key}
+              onPress={() => setTab(item.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              style={{
+                width: '31%',
+                minHeight: 58,
+                marginBottom: spacing.sm,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: active ? colors.primary : colors.border,
+                backgroundColor: active ? colors.primary : colors.bg,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.xs,
+              }}
+            >
+              <Ionicons
+                name={item.icon}
+                size={19}
+                color={active ? '#fff' : colors.textMuted}
+              />
+              <Text
+                numberOfLines={1}
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: active ? '#fff' : colors.text,
+                }}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {tab === 'Resources' && <ResourcesTab />}
       {tab === 'Geo' && <GeoTab />}
       {tab === 'Beneficiaries' && <BeneficiariesTab />}
