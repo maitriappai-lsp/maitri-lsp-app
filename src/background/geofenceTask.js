@@ -38,6 +38,7 @@ import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
+import { isFacilitatorRole } from '../utils/roles';
 
 export const GEOFENCE_TASK = 'maitri-geofence-task';
 const SESSION_KEY = 'maitri-lsp-session-v1';
@@ -165,7 +166,7 @@ if (eventType !== Location.GeofencingEventType.Exit) return;
       return;
     }
     const { token, user } = JSON.parse(raw);
-    if (!token || !user || user.role !== 'Facilitator') {
+    if (!token || !user || !isFacilitatorRole(user.role)) {
       await logDebug(`skipped: session present but not a facilitator (role=${user?.role})`);
       return;
     }

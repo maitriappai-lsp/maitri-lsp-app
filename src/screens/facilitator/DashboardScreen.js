@@ -12,15 +12,31 @@ import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { todayLocalYMD } from '../../utils/date';
+import { todayLocalYMD, parseTimeToMinutes } from '../../utils/date';
+import { usesSessions } from '../../utils/roles';
 
 const TABS = ['Overview', 'Schedule', 'Attendance', 'Sessions', 'Uploads'];
+// Roles without Schedule/Sessions only get these tabs.
+const LIMITED_TABS = ['Attendance', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
+
+// Latest-first: newest date on top; within a day, the later time on top.
+// Records with no parseable time sink below timed ones on the same date.
+const latestFirst = (timeKey) => (a, b) => {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  const ta = parseTimeToMinutes(a[timeKey]);
+  const tb = parseTimeToMinutes(b[timeKey]);
+  if (ta == null && tb == null) return 0;
+  if (ta == null) return 1;
+  if (tb == null) return -1;
+  return tb - ta;
+};
 
 export default function DashboardScreen() {
   const { currentUser } = useAuth();
   const { db } = useData();
-  const [tab, setTab] = useState('Overview');
+  const visibleTabs = usesSessions(currentUser?.role) ? TABS : LIMITED_TABS;
+  const [tab, setTab] = useState(visibleTabs[0]);
   const [ragFilter, setRagFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [from, setFrom] = useState('2026-09-01');
@@ -39,7 +55,8 @@ export default function DashboardScreen() {
           const cat = db.categories.find((x) => x.id === p.categoryId);
           const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag} ${p.trackerRagStatus} ${p.trackerRemarks}`.toLowerCase();
           return haystack.includes(query.toLowerCase());
-        }),
+        })
+        .sort(latestFirst('timeIn')),
     [db, currentUser, from, to, ragFilter, query]
   );
 
@@ -47,7 +64,8 @@ export default function DashboardScreen() {
     () =>
       db.attendance
         .filter((a) => a.facilitatorId === currentUser?.id)
-        .filter((a) => a.date >= from && a.date <= to),
+        .filter((a) => a.date >= from && a.date <= to)
+        .sort(latestFirst('timeIn')),
     [db, currentUser, from, to]
   );
 
@@ -61,8 +79,7 @@ export default function DashboardScreen() {
         // Sessions where I'm the facilitator OR the assistant.
         .filter((s) => s.facilitatorId === currentUser?.id || s.assistantId === currentUser?.id)
         .filter((s) => s.date >= from && s.date <= to)
-        .slice()
-        .sort((a, b) => (a.date === b.date ? (a.time || '').localeCompare(b.time || '') : a.date < b.date ? -1 : 1)),
+        .sort(latestFirst('time')),
     [db, currentUser, from, to]
   );
 
@@ -120,7 +137,7 @@ export default function DashboardScreen() {
         style={{ height: 40, flexGrow: 0, marginBottom: spacing.sm }}
         contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}
       >
-        {TABS.map((t) => {
+        {visibleTabs.map((t) => {
           const active = tab === t;
           return (
             <TouchableOpacity
@@ -260,10 +277,7 @@ export default function DashboardScreen() {
           (myAttendance.length === 0 ? (
             <Text style={{ color: colors.textMuted }}>No attendance records for this range.</Text>
           ) : (
-            myAttendance
-              .slice()
-              .sort((a, b) => (a.date < b.date ? 1 : -1))
-              .map((a) => {
+            myAttendance.map((a) => {
                 const b = db.beneficiaries.find((x) => x.id === a.beneficiaryId);
                 return (
                   <Card key={a.id}>

@@ -12,9 +12,22 @@ import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField, TimeField, SectionLabel } from '../../components/UI';
 import { colors, spacing, ragColor } from '../../theme';
-import { todayLocalYMD, isFutureTime } from '../../utils/date';
+import { todayLocalYMD, isFutureTime, parseTimeToMinutes } from '../../utils/date';
+import { isFacilitatorRole } from '../../utils/roles';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
+
+// Latest-first: newest date on top; within a day, the later time on top.
+// Records with no parseable time sink below timed ones on the same date.
+const latestFirst = (timeKey) => (a, b) => {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  const ta = timeKey ? parseTimeToMinutes(a[timeKey]) : null;
+  const tb = timeKey ? parseTimeToMinutes(b[timeKey]) : null;
+  if (ta == null && tb == null) return 0;
+  if (ta == null) return 1;
+  if (tb == null) return -1;
+  return tb - ta;
+};
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
 const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
@@ -231,7 +244,7 @@ export default function AdminDashboardScreen() {
     }
   }
 
-  const facilitators = db.resources.filter((r) => r.role === 'Facilitator');
+  const facilitators = db.resources.filter((r) => isFacilitatorRole(r.role));
 
   const sessions = useMemo(
     () =>
@@ -245,7 +258,8 @@ export default function AdminDashboardScreen() {
           const cat = db.categories.find((x) => x.id === p.categoryId);
           const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag} ${p.trackerRagStatus} ${p.trackerRemarks}`.toLowerCase();
           return haystack.includes(query.toLowerCase());
-        }),
+        })
+        .sort(latestFirst('timeIn')),
     [db, facilitatorId, from, to, ragFilter, query]
   );
 
@@ -253,13 +267,14 @@ export default function AdminDashboardScreen() {
     () =>
       db.attendance
         .filter((a) => (facilitatorId === 'all' ? true : a.facilitatorId === facilitatorId))
-        .filter((a) => a.date >= from && a.date <= to),
+        .filter((a) => a.date >= from && a.date <= to)
+        .sort(latestFirst('timeIn')),
     [db, facilitatorId, from, to]
   );
 
-  const uploads = db.uploads.filter(
-    (u) => (facilitatorId === 'all' ? true : u.facilitatorId === facilitatorId) && u.date >= from && u.date <= to
-  );
+  const uploads = db.uploads
+    .filter((u) => (facilitatorId === 'all' ? true : u.facilitatorId === facilitatorId) && u.date >= from && u.date <= to)
+    .sort(latestFirst(null));
 
   const [exporting, setExporting] = useState(false);
 
@@ -658,10 +673,7 @@ export default function AdminDashboardScreen() {
           (attendance.length === 0 ? (
             <Text style={{ color: colors.textMuted }}>No attendance records for this range.</Text>
           ) : (
-            attendance
-              .slice()
-              .sort((a, b) => (a.date < b.date ? 1 : -1))
-              .map((a) => {
+            attendance.map((a) => {
                 const b = db.beneficiaries.find((x) => x.id === a.beneficiaryId);
                 const f = db.resources.find((x) => x.id === a.facilitatorId);
 

@@ -25,6 +25,7 @@ import { useData } from '../../data/store';
 import { Screen, Card, SectionLabel, Select, Field, DateField, TimeField, PrimaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { toLocalYMD, todayLocalYMD, isFutureTime } from '../../utils/date';
+import { isFacilitatorRole } from '../../utils/roles';
 
 function dateRange(from, to) {
   const dates = [];
@@ -128,7 +129,7 @@ function AddModal({ visible, title, onClose, children }) {
 export default function OverrideScreen() {
   const { currentUser } = useAuth();
   const { db, addRecord, updateRecord, nextId } = useData();
-  const activeFacilitators = db.resources.filter((r) => r.role === 'Facilitator' && r.active !== false);
+  const activeFacilitators = db.resources.filter((r) => isFacilitatorRole(r.role) && r.active !== false);
 
   // ---- Correct attendance time -------------------------------------------
   const [showAdd, setShowAdd] = useState(false);

@@ -59,7 +59,7 @@ function TopBar() {
         <View>
           <Text style={{ fontWeight: '700', color: colors.text }}>{currentUser?.name}</Text>
           <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700' }}>
-            {currentUser?.role === 'Admin' ? 'Programme Admin' : 'LSP Resource'}
+            {currentUser?.role === 'Admin' ? 'Programme Admin' : currentUser?.role === 'Facilitator' ? 'LSP Resource' : currentUser?.role}
           </Text>
         </View>
       </View>

@@ -7,6 +7,8 @@ import SessionsScreen from '../screens/facilitator/SessionsScreen';
 import UploadsScreen from '../screens/facilitator/UploadsScreen';
 import DashboardScreen from '../screens/facilitator/DashboardScreen';
 import ContentScreen from '../screens/facilitator/ContentScreen';
+import { useAuth } from '../context/AuthContext';
+import { usesSessions } from '../utils/roles';
 
 const Tab = createBottomTabNavigator();
 
@@ -20,6 +22,9 @@ const TAB_ICONS = {
 
 // Bottom nav order per spec: Attendance · Sessions (PSR) · Uploads · Dashboard · Content
 export default function FacilitatorTabs() {
+  const { currentUser } = useAuth();
+  // BLP / LTS / Other Facilitators have no Sessions (PSR) -- hide the tab.
+  const showSessions = usesSessions(currentUser?.role);
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -34,7 +39,9 @@ export default function FacilitatorTabs() {
       })}
     >
       <Tab.Screen name="Attendance" component={AttendanceScreen} />
-      <Tab.Screen name="Sessions" component={SessionsScreen} options={{ title: 'Sessions (PSR)' }} />
+      {showSessions && (
+        <Tab.Screen name="Sessions" component={SessionsScreen} options={{ title: 'Sessions (PSR)' }} />
+      )}
       <Tab.Screen name="Uploads" component={UploadsScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Content" component={ContentScreen} />

@@ -21,6 +21,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
+import { ROLE_OPTIONS } from '../../utils/roles';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
 import { todayLocalYMD } from '../../utils/date';
@@ -407,7 +408,7 @@ function ResourcesTab() {
         <Select
           value={role}
           onSelect={setRole}
-          options={['Facilitator', 'Admin'].map((v) => ({ value: v, label: v }))}
+          options={ROLE_OPTIONS.map((v) => ({ value: v, label: v }))}
         />
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
@@ -441,7 +442,7 @@ function ResourcesTab() {
             <Select
               value={editRole}
               onSelect={setEditRole}
-              options={['Facilitator', 'Admin'].map((v) => ({ value: v, label: v }))}
+              options={ROLE_OPTIONS.map((v) => ({ value: v, label: v }))}
             />
             <View style={{ flexDirection: 'row', gap: spacing.md }}>
               <View style={{ flex: 1 }}>
@@ -822,9 +823,12 @@ function GeoTab() {
   const [editLng, setEditLng] = useState('');
   const [editRadius, setEditRadius] = useState('150');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [locatingEdit, setLocatingEdit] = useState(false);
 
-  async function useCurrentLocation() {
-    setLocating(true);
+  // Fetches the device position and hands it to `apply`. Shared by the Add
+  // popup (fills lat/lng) and the inline Edit form (fills editLat/editLng).
+  async function fetchCurrentLocation(apply, setBusy) {
+    setBusy(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -832,13 +836,20 @@ function GeoTab() {
         return;
       }
       const pos = await Location.getCurrentPositionAsync({});
-      setLat(String(pos.coords.latitude));
-      setLng(String(pos.coords.longitude));
+      apply(String(pos.coords.latitude), String(pos.coords.longitude));
     } catch (e) {
       Alert.alert('Could not get location', e.message || 'Please try again, or enter coordinates manually.');
     } finally {
-      setLocating(false);
+      setBusy(false);
     }
+  }
+
+  function useCurrentLocation() {
+    return fetchCurrentLocation((la, ln) => { setLat(la); setLng(ln); }, setLocating);
+  }
+
+  function useCurrentLocationForEdit() {
+    return fetchCurrentLocation((la, ln) => { setEditLat(la); setEditLng(ln); }, setLocatingEdit);
   }
 
   // Note: the Add-geofence form opens in a popup. Tapping "+" fills in the
@@ -945,6 +956,12 @@ function GeoTab() {
               School name can't be changed here -- delete and re-add if it was mistyped.
             </Text>
             <Field label="Label (optional)" value={editLabel} onChangeText={setEditLabel} placeholder="e.g. Block A" />
+            <SecondaryButton
+              title={locatingEdit ? 'Getting current location...' : 'Use current location'}
+              onPress={useCurrentLocationForEdit}
+              disabled={locatingEdit}
+              style={{ marginBottom: spacing.md }}
+            />
             <View style={{ flexDirection: 'row', gap: spacing.md }}>
               <View style={{ flex: 1 }}>
                 <Field label="Latitude" value={editLat} onChangeText={setEditLat} keyboardType="decimal-pad" />

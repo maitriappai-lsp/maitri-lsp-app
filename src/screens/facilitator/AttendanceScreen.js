@@ -54,6 +54,7 @@ import { registerGeofences, unregisterGeofences, getDebugLog, clearDebugLog, isG
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
+import { usesSessions } from '../../utils/roles';
 
 // How long the facilitator must be continuously outside the checked-in
 // geofence before auto time-out fires.
@@ -65,6 +66,9 @@ export default function AttendanceScreen() {
   const faceRecognitionEnabled = db.systemParameters?.facilitatorFaceRecognitionEnabled !== false;
   const gpsEnabled = db.systemParameters?.gpsOnBeneficiary !== false;
   const today = todayLocalYMD();
+  // Schedule / Sessions don't apply to BLP, LTS and Other Facilitators, so
+  // their visits are never flagged ad-hoc and there's no Sessions follow-up.
+  const scheduleApplies = usesSessions(currentUser?.role);
 
   const todaysSchedule = useMemo(
     // Sessions where I'm the main facilitator OR the assistant -- either way
@@ -371,7 +375,7 @@ async function markTimeIn() {
       timeIn: nowHHMM(),
       timeOut: '',
       geoVerified: gpsEnabled ? !!geoMatch : false,
-      adHoc: !isScheduled,
+      adHoc: scheduleApplies && !isScheduled,
     };
 
     const saved = await addRecord('attendance', record);
@@ -545,7 +549,7 @@ async function markTimeIn() {
           </Card>
         )}
 
-        {!resumedOpenSession && todaysSchedule.length > 0 && (
+        {!resumedOpenSession && scheduleApplies && todaysSchedule.length > 0 && (
           <Card>
             <SectionLabel>Scheduled for you today</SectionLabel>
             {todaysSchedule.map((s) => {
@@ -606,9 +610,9 @@ async function markTimeIn() {
               </>
             )}
             {beneficiary && (
-              <Text style={{ color: isScheduled ? colors.textMuted : colors.amber, fontSize: 12, marginTop: spacing.sm }}>
+              <Text style={{ color: !scheduleApplies || isScheduled ? colors.textMuted : colors.amber, fontSize: 12, marginTop: spacing.sm }}>
                 Checking in for: {beneficiary.school} {beneficiary.class} {beneficiary.section}
-                {!isScheduled && ' -- ad-hoc visit, not on today\'s schedule'}
+                {scheduleApplies && !isScheduled && ' -- ad-hoc visit, not on today\'s schedule'}
               </Text>
             )}
           </Card>
@@ -660,13 +664,13 @@ async function markTimeIn() {
               {gpsEnabled ? 'Check your location' : 'Select a beneficiary'}{faceRecognitionEnabled ? ' and pass the face check' : ''} to enable time in.
             </Text>
           )}
-          {!isScheduled && beneficiary && timeIn && (
+          {scheduleApplies && !isScheduled && beneficiary && timeIn && (
             <Text style={{ color: colors.amber, fontSize: 12, marginTop: spacing.sm }}>
               Saved with an ad-hoc remark -- {beneficiary.school} {beneficiary.class} {beneficiary.section} wasn't on
               today's schedule. Visible to your Admin on their dashboard.
             </Text>
           )}
-          {timeOut && (
+          {scheduleApplies && timeOut && (
             <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
               Head to Sessions to log the category, rating and headcount for this visit.
             </Text>
