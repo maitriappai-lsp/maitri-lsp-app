@@ -998,85 +998,346 @@ function GeoTab() {
 }
 
 
+
 function SystemParametersTab() {
   const { db, updateSystemParameters, refresh } = useData();
-  const faceEnabled = db.systemParameters?.facilitatorFaceRecognitionEnabled !== false;
-  const gpsEnabled = db.systemParameters?.gpsOnBeneficiary !== false;
+
+  const params = db.systemParameters || {};
+
+  const [productType, setProductType] = useState(params.productType || '');
+  const [orgName, setOrgName] = useState(params.orgName || '');
+  const [maxNamedUsers, setMaxNamedUsers] = useState(
+    params.maxNamedUsers != null ? String(params.maxNamedUsers) : ''
+  );
+  const [validityEnd, setValidityEnd] = useState(
+    params.productValidityEnd || ''
+  );
+
+  const [gpsEnabled, setGpsEnabled] = useState(
+    params.gpsOnBeneficiary !== false
+  );
+  const [faceEnabled, setFaceEnabled] = useState(
+    params.facilitatorFaceRecognitionEnabled !== false
+  );
+  const [loginByEmail, setLoginByEmail] = useState(
+    params.loginByEmail === true
+  );
+  const [uploadTypes, setUploadTypes] = useState(
+    params.allowedUploadTypes || ['photo', 'pdf', 'ppt']
+  );
+
   const [saving, setSaving] = useState(false);
 
-  async function save(parameter, value) {
+  async function save(parameter, value, label) {
     setSaving(true);
     try {
       await updateSystemParameters({ [parameter]: value });
-      const label = parameter === 'gpsOnBeneficiary' ? 'GPS attendance verification' : 'Facilitator face recognition';
-      Alert.alert('System parameter saved', `${label} is now ${value ? 'enabled' : 'disabled'}.`);
+      Alert.alert('Saved', `${label} updated successfully.`);
     } catch (e) {
       Alert.alert('Could not save setting', e.message || 'Please try again.');
-      try { await refresh(); } catch (_) {}
+      try {
+        await refresh();
+      } catch (_) {}
     } finally {
       setSaving(false);
     }
   }
 
+  async function saveGeneralSettings() {
+    if (maxNamedUsers && (
+      !Number.isInteger(Number(maxNamedUsers)) ||
+      Number(maxNamedUsers) <= 0
+    )) {
+      return Alert.alert(
+        'Invalid value',
+        'Maximum named users must be a positive whole number.'
+      );
+    }
+
+    if (validityEnd && !/^\d{4}-\d{2}-\d{2}$/.test(validityEnd)) {
+      return Alert.alert(
+        'Invalid date',
+        'Enter the validity date in YYYY-MM-DD format.'
+      );
+    }
+
+    setSaving(true);
+    try {
+      const settings = [
+        ['productType', productType || null],
+        ['orgName', orgName || null],
+        ['maxNamedUsers', maxNamedUsers ? Number(maxNamedUsers) : null],
+        ['productValidityEnd', validityEnd || null],
+      ];
+
+      for (const [key, value] of settings) {
+        await updateSystemParameters({ [key]: value });
+      }
+
+      Alert.alert('Saved', 'Organisation and product settings updated.');
+    } catch (e) {
+      Alert.alert('Could not save settings', e.message || 'Please try again.');
+      try {
+        await refresh();
+      } catch (_) {}
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleUploadType(type) {
+    const next = uploadTypes.includes(type)
+      ? uploadTypes.filter((item) => item !== type)
+      : [...uploadTypes, type];
+
+    setUploadTypes(next);
+    save('allowedUploadTypes', next, 'Allowed upload types');
+  }
+
   function reset() {
     Alert.alert(
       'Reset system parameters',
-      'Restore the default settings? GPS attendance verification and facilitator face recognition will both be enabled.',
+      'Restore the default switches and upload types? GPS verification and face recognition will be enabled. Organisation and product details will be preserved.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', onPress: async () => {
-          setSaving(true);
-          try {
-            await updateSystemParameters({ gpsOnBeneficiary: true });
-            await updateSystemParameters({ facilitatorFaceRecognitionEnabled: true });
-            Alert.alert('System parameters reset', 'GPS attendance verification and face recognition are enabled.');
-          } catch (e) {
-            Alert.alert('Could not reset settings', e.message || 'Please try again.');
-            try { await refresh(); } catch (_) {}
-          } finally {
-            setSaving(false);
-          }
-        } },
+        {
+          text: 'Reset',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await updateSystemParameters({ gpsOnBeneficiary: true });
+              await updateSystemParameters({
+                facilitatorFaceRecognitionEnabled: true,
+              });
+              await updateSystemParameters({ loginByEmail: false });
+              await updateSystemParameters({
+                allowedUploadTypes: ['photo', 'pdf', 'ppt'],
+              });
+
+              setGpsEnabled(true);
+              setFaceEnabled(true);
+              setLoginByEmail(false);
+              setUploadTypes(['photo', 'pdf', 'ppt']);
+
+              Alert.alert('Reset complete', 'Default settings restored.');
+            } catch (e) {
+              Alert.alert(
+                'Could not reset settings',
+                e.message || 'Please try again.'
+              );
+              try {
+                await refresh();
+              } catch (_) {}
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
       ]
     );
   }
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xl }}>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: spacing.xl }}
+    >
+      <Card>
+        <SectionLabel>Organisation and product</SectionLabel>
+
+        <Field
+          label="Product type"
+          value={productType}
+          onChangeText={setProductType}
+          placeholder="e.g. Maitri LSP"
+        />
+
+        <Field
+          label="Organisation name"
+          value={orgName}
+          onChangeText={setOrgName}
+          placeholder="Enter organisation name"
+        />
+
+        <Field
+          label="Maximum named users"
+          value={maxNamedUsers}
+          onChangeText={setMaxNamedUsers}
+          keyboardType="number-pad"
+          placeholder="Leave blank if unlimited"
+        />
+
+        <DateField
+          label="Product validity end date"
+          value={validityEnd}
+          onChange={setValidityEnd}
+          placeholder="YYYY-MM-DD"
+        />
+
+        <PrimaryButton
+          title={saving ? 'Saving...' : 'Save product settings'}
+          onPress={saveGeneralSettings}
+          disabled={saving}
+        />
+      </Card>
+
+      <Card>
+        <SectionLabel>Login settings</SectionLabel>
+
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+              Login by email
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+              Allow users to log in using their email address.
+            </Text>
+          </View>
+          <Switch
+            value={loginByEmail}
+            onValueChange={(value) => {
+              setLoginByEmail(value);
+              save('loginByEmail', value, 'Login by email');
+            }}
+            disabled={saving}
+            trackColor={{ false: colors.border, true: colors.primary }}
+          />
+        </View>
+      </Card>
+
+      <Card>
+        <SectionLabel>Allowed upload file types</SectionLabel>
+        <Text style={{
+          color: colors.textMuted,
+          fontSize: 12,
+          marginBottom: spacing.md,
+        }}>
+          Select the file types users are allowed to upload.
+        </Text>
+
+        {[
+          { key: 'photo', label: 'Photos', icon: 'image-outline' },
+          { key: 'pdf', label: 'PDF documents', icon: 'document-text-outline' },
+          { key: 'ppt', label: 'PowerPoint presentations', icon: 'easel-outline' },
+        ].map((item) => (
+          <View
+            key={item.key}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: spacing.md,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Ionicons
+                name={item.icon}
+                size={20}
+                color={colors.textMuted}
+                style={{ marginRight: spacing.sm }}
+              />
+              <Text style={{ color: colors.text, fontWeight: '600' }}>
+                {item.label}
+              </Text>
+            </View>
+            <Switch
+              value={uploadTypes.includes(item.key)}
+              onValueChange={() => toggleUploadType(item.key)}
+              disabled={saving}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+        ))}
+      </Card>
+
       <Card>
         <SectionLabel>Facilitator attendance</SectionLabel>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>GPS location verification</Text>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+              GPS location verification
+            </Text>
             <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
               When enabled, facilitators must be inside a registered geofence to check in. When disabled, they select the beneficiary manually and location-based auto time-out is disabled.
             </Text>
           </View>
-          <Switch value={gpsEnabled} onValueChange={(value) => save('gpsOnBeneficiary', value)} disabled={saving} trackColor={{ false: colors.border, true: colors.primary }} />
+          <Switch
+            value={gpsEnabled}
+            onValueChange={(value) => {
+              setGpsEnabled(value);
+              save('gpsOnBeneficiary', value, 'GPS attendance verification');
+            }}
+            disabled={saving}
+            trackColor={{ false: colors.border, true: colors.primary }}
+          />
         </View>
-        <Text style={{ color: gpsEnabled ? colors.green : colors.amber, fontWeight: '700', marginTop: spacing.sm }}>
-          GPS verification: {gpsEnabled ? 'Enabled' : 'Disabled'}{saving ? ' -- saving...' : ''}
+
+        <Text style={{
+          color: gpsEnabled ? colors.green : colors.amber,
+          fontWeight: '700',
+          marginTop: spacing.sm,
+        }}>
+          GPS verification: {gpsEnabled ? 'Enabled' : 'Disabled'}
         </Text>
+
         <View style={{ height: spacing.lg }} />
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Face recognition</Text>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+              Face recognition
+            </Text>
             <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
               When enabled, facilitators must complete the face check before marking attendance time in. When disabled, the face check is skipped.
             </Text>
           </View>
-          <Switch value={faceEnabled} onValueChange={(value) => save('facilitatorFaceRecognitionEnabled', value)} disabled={saving} trackColor={{ false: colors.border, true: colors.primary }} />
+          <Switch
+            value={faceEnabled}
+            onValueChange={(value) => {
+              setFaceEnabled(value);
+              save('facilitatorFaceRecognitionEnabled', value, 'Face recognition');
+            }}
+            disabled={saving}
+            trackColor={{ false: colors.border, true: colors.primary }}
+          />
         </View>
-        <Text style={{ color: faceEnabled ? colors.green : colors.amber, fontWeight: '700', marginTop: spacing.sm }}>
-          Face recognition: {faceEnabled ? 'Enabled' : 'Disabled'}{saving ? ' -- saving...' : ''}
+
+        <Text style={{
+          color: faceEnabled ? colors.green : colors.amber,
+          fontWeight: '700',
+          marginTop: spacing.sm,
+        }}>
+          Face recognition: {faceEnabled ? 'Enabled' : 'Disabled'}
         </Text>
       </Card>
+
       <Card>
         <SectionLabel>Reset parameters</SectionLabel>
-        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
-          Restore both attendance settings to their defaults: GPS verification Enabled and face recognition Enabled.
+        <Text style={{
+          color: colors.textMuted,
+          fontSize: 12,
+          marginBottom: spacing.md,
+        }}>
+          Restore default login, attendance and upload settings. Organisation and product details will remain unchanged.
         </Text>
-        <SecondaryButton title="Reset to defaults" onPress={reset} disabled={saving || (gpsEnabled && faceEnabled)} />
+        <SecondaryButton
+          title="Reset to defaults"
+          onPress={reset}
+          disabled={saving}
+        />
       </Card>
     </ScrollView>
   );
