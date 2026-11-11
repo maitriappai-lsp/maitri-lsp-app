@@ -927,10 +927,10 @@ function GeoTab() {
         />
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <Field label="Latitude" value={lat} onChangeText={setLat} keyboardType="decimal-pad" placeholder="13.0343" />
+            <Field label="Latitude" value={lat} onChangeText={setLat} keyboardType="decimal-pad" placeholder="13.034300" />
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="Longitude" value={lng} onChangeText={setLng} keyboardType="decimal-pad" placeholder="80.2545" />
+            <Field label="Longitude" value={lng} onChangeText={setLng} keyboardType="decimal-pad" placeholder="80.254500" />
           </View>
         </View>
         <Field label="Radius (metres)" value={radius} onChangeText={setRadius} keyboardType="number-pad" />
@@ -971,7 +971,7 @@ function GeoTab() {
                   {g.school}{g.label ? ` -- ${g.label}` : ''}
                 </Text>
                 <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                  {g.lat.toFixed(4)}, {g.lng.toFixed(4)} - {g.radiusMeters}m
+                  {Number(g.lat).toFixed(6)}, {Number(g.lng).toFixed(6)} - {g.radiusMeters}m
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
