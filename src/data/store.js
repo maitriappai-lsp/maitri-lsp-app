@@ -38,8 +38,15 @@ const EMPTY_DB = {
 };
 
 function nextId(prefix, list) {
-  const n = list.length + 1;
-  return `${prefix}-${String(n).padStart(4, '0')}`;
+  // Use the highest existing numeric suffix, not the row count. Row counts
+  // can be lower than the highest ID when records have been deleted or
+  // imported, which would otherwise cause an ID collision.
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`);
+  const maxNumber = (list || []).reduce((max, record) => {
+    const match = pattern.exec(String(record?.id || ''));
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `${prefix}-${String(maxNumber + 1).padStart(4, '0')}`;
 }
 
 export function DataProvider({ children }) {
@@ -152,7 +159,11 @@ export function DataProvider({ children }) {
           const saved = await apiPost(`/api/${table}`, record);
           setDb((prev) => ({
             ...prev,
-            [table]: prev[table].map((r) => (r.id === record.id ? saved : r)),
+            // The server may assign a different ID if the proposed one
+            // already exists. Replace only this optimistic record by object
+            // identity; matching by the proposed ID could overwrite an older
+            // record that already had that ID.
+            [table]: prev[table].map((r) => (r === record ? saved : r)),
           }));
           return saved;
         } catch (e) {
@@ -200,8 +211,9 @@ export function DataProvider({ children }) {
       // response comes back -- this reserves a distinct id for each one
       // upfront instead.
       nextIds: (prefix, table, count) => {
-        const start = db[table].length;
-        return Array.from({ length: count }, (_, i) => `${prefix}-${String(start + i + 1).padStart(4, '0')}`);
+        const firstId = nextId(prefix, db[table]);
+        const start = Number(firstId.slice(firstId.lastIndexOf('-') + 1));
+        return Array.from({ length: count }, (_, i) => `${prefix}-${String(start + i).padStart(4, '0')}`);
       },
 
       updateSystemParameters: (patch) => tracked(async () => {

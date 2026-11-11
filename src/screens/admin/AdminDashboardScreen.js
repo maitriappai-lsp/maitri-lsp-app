@@ -11,13 +11,33 @@ import * as Sharing from 'expo-sharing';
 import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField, TimeField, SectionLabel } from '../../components/UI';
-import { colors, spacing } from '../../theme';
+import { colors, spacing, ragColor } from '../../theme';
 import { todayLocalYMD, isFutureTime } from '../../utils/date';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
 const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
+
+// Compact chip selector, matching the facilitator session RAG control.
+function ChoiceRow({ label, options, value, onSelect }) {
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      {label ? <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700', marginBottom: spacing.xs }}>{label}</Text> : null}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+        {options.map((o) => (
+          <Chip
+            key={o.value}
+            label={o.label}
+            active={o.value === value}
+            color={o.color}
+            onPress={() => onSelect(o.value)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
 
 // Small tappable icon used in record rows (edit / delete / view).
 function IconButton({ name, color, label, onPress, size = 22 }) {
@@ -493,11 +513,14 @@ export default function AdminDashboardScreen() {
                     onSelect={setEditPsrRag}
                     options={RAGS.map((r) => ({ value: r, label: r }))}
                   />
-                  <Select
+                  <ChoiceRow
                     label="Tracker RAG status"
                     value={editPsrTrackerRagStatus}
                     onSelect={setEditPsrTrackerRagStatus}
-                    options={[{ value: '', label: 'Not set' }, ...RAGS.map((r) => ({ value: r, label: r }))]}
+                    options={[
+                      { value: '', label: 'Not set' },
+                      ...RAGS.map((r) => ({ value: r, label: r, color: ragColor(r) })),
+                    ]}
                   />
                   <Field
                     label="Tracker remarks"

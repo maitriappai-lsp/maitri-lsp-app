@@ -436,11 +436,14 @@ function SessionFields({ f, date, facilitatorId, beneficiaryPicker }) {
         options={RAGS.map((r) => ({ value: r, label: r, color: ragColor(r) }))}
       />
 
-      <Select
+      <ChoiceRow
         label="Tracker RAG status"
         value={f.trackerRagStatus}
         onSelect={f.setTrackerRagStatus}
-        options={[{ value: '', label: 'Not set' }, ...RAGS.map((r) => ({ value: r, label: r, color: ragColor(r) }))]}
+        options={[
+          { value: '', label: 'Not set' },
+          ...RAGS.map((r) => ({ value: r, label: r, color: ragColor(r) })),
+        ]}
       />
       <Field
         label="Tracker remarks"
