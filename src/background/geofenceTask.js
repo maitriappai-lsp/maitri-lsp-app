@@ -149,7 +149,14 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
   await logDebug(
     `task invoked: eventType=${eventType === Location.GeofencingEventType.Exit ? 'Exit' : eventType === Location.GeofencingEventType.Enter ? 'Enter' : eventType} region=${region?.identifier}`
   );
-  if (eventType !== Location.GeofencingEventType.Exit) return; // entries don't auto time-in; only exits matter here
+ if (eventType === Location.GeofencingEventType.Enter) {
+  await logDebug(
+    `entered geofence: ${region?.identifier}`
+  );
+  return;
+}
+
+if (eventType !== Location.GeofencingEventType.Exit) return;
 
   try {
     const raw = await AsyncStorage.getItem(SESSION_KEY);
@@ -278,13 +285,13 @@ export async function registerGeofences(geoList) {
     // monitored in the background (the foreground watcher, where active,
     // has no such limit).
     const regions = geoList.slice(0, 20).map((g) => ({
-      identifier: g.id,
-      latitude: g.lat,
-      longitude: g.lng,
-      radius: g.radiusMeters || 150,
-      notifyOnEnter: false,
-      notifyOnExit: true,
-    }));
+  identifier: g.id,
+  latitude: g.lat,
+  longitude: g.lng,
+  radius: g.radiusMeters || 150,
+  notifyOnEnter: true,
+  notifyOnExit: true,
+}));
 
     await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
     await logDebug(`registerGeofences: registered ${regions.length} region(s) successfully`);

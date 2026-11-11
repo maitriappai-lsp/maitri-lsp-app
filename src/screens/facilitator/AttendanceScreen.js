@@ -343,40 +343,95 @@ export default function AttendanceScreen() {
 
   const canMarkTime = (!gpsEnabled || !!geoMatch) && !!beneficiary && (!faceRecognitionEnabled || faceVerified);
 
-  async function markTimeIn() {
-    // Safety net against a stale-state double time-in, on top of the
-    // resume-on-open check above.
-    const alreadyOpen = db.attendance.find(
-      (a) => a.facilitatorId === currentUser.id && a.date === today && !a.timeOut
+  
+async function markTimeIn() {
+  // Safety net against a stale-state double time-in.
+  const alreadyOpen = db.attendance.find(
+    (a) => a.facilitatorId === currentUser.id && a.date === today && !a.timeOut
+  );
+
+  if (alreadyOpen) {
+    Alert.alert(
+      'Already timed in',
+      'You have an open session today -- time out of it before starting another.'
     );
-    if (alreadyOpen) {
-      Alert.alert('Already timed in', 'You have an open session today -- time out of it before starting another.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const id = nextId('ATT', 'attendance');
-      const record = {
-        id,
-        beneficiaryId: beneficiary.id,
-        facilitatorId: currentUser.id,
-        date: today,
-        timeIn: nowHHMM(),
-        timeOut: '',
-        geoVerified: gpsEnabled ? !!geoMatch : false,
-        adHoc: !isScheduled,
-      };
-      const saved = await addRecord('attendance', record);
-      setAttendanceRecordId(saved.id);
-      setTimeIn(record.timeIn);
-      setCheckedInGeoId(gpsEnabled && geoMatch ? geoMatch.id : null);
-      outsideSinceRef.current = null;
-    } catch (e) {
-      Alert.alert('Could not save time in', e.message || 'Please try again.');
-    } finally {
-      setSaving(false);
-    }
+    return;
   }
+
+  setSaving(true);
+
+  try {
+    const id = nextId('ATT', 'attendance');
+
+    const record = {
+      id,
+      beneficiaryId: beneficiary.id,
+      facilitatorId: currentUser.id,
+      date: today,
+      timeIn: nowHHMM(),
+      timeOut: '',
+      geoVerified: gpsEnabled ? !!geoMatch : false,
+      adHoc: !isScheduled,
+    };
+
+    const saved = await addRecord('attendance', record);
+
+    const activeGeoId = gpsEnabled && geoMatch ? geoMatch.id : null;
+
+    setAttendanceRecordId(saved.id);
+    setTimeIn(record.timeIn);
+    setTimeOut(null);
+    setCheckedInGeoId(activeGeoId);
+    setResumedOpenSession(false);
+
+    // Reset the previous session's automatic timeout tracking.
+    outsideSinceRef.current = null;
+    autoActionInFlightRef.current = false;
+
+    // Update the watcher immediately rather than waiting for the next
+    // React effect. This prevents it from reading the previous session's
+    // timeOut or geofence ID.
+    stateRef.current = {
+      ...stateRef.current,
+      timeIn: record.timeIn,
+      timeOut: null,
+      checkedInGeoId: activeGeoId,
+      attendanceRecordId: saved.id,
+      saving: true,
+      geo: db.geo,
+    };
+
+    // Re-register background geofences for every new attendance session.
+    // This is important when the facilitator moves to another beneficiary
+    // after an automatic or manual timeout.
+    if (gpsEnabled && db.geo?.length) {
+      const bgResult = await registerGeofences(db.geo);
+
+      if (bgResult.ok) {
+        setAutoWatchMode('background');
+        setAutoWatchFailReason(null);
+        setAutoWatching(true);
+
+        // Background monitoring now covers the exit events.
+        if (watchSubRef.current) {
+          watchSubRef.current.remove();
+          watchSubRef.current = null;
+        }
+      } else {
+        setAutoWatchFailReason(
+          bgResult.reason +
+          (bgResult.message ? `: ${bgResult.message}` : '')
+        );
+        // The existing foreground watcher remains available as fallback.
+      }
+    }
+  } catch (e) {
+    Alert.alert('Could not save time in', e.message || 'Please try again.');
+  } finally {
+    setSaving(false);
+  }
+}
+
 
   async function markTimeOut({ auto = false } = {}) {
     // Called from the location watcher too, which was set up on first mount,
