@@ -37,7 +37,7 @@ export default function DashboardScreen() {
           if (!query) return true;
           const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
           const cat = db.categories.find((x) => x.id === p.categoryId);
-          const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag}`.toLowerCase();
+          const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag} ${p.trackerRagStatus} ${p.trackerRemarks}`.toLowerCase();
           return haystack.includes(query.toLowerCase());
         }),
     [db, currentUser, from, to, ragFilter, query]
@@ -188,6 +188,8 @@ export default function DashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Assistant: {sessionAssistant?.name || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Tracker RAG status: {p.trackerRagStatus || '-'}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Tracker remarks: {p.trackerRemarks || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time: {p.timeIn} - {p.timeOut}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>School feedback: {p.schoolFeedback || '-'}</Text>

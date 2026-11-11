@@ -291,6 +291,8 @@ function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssis
   const [timeOutValue, setTimeOut] = useState(timeOut);
   const [rating, setRating] = useState('Good');
   const [rag, setRag] = useState('Green');
+  const [trackerRagStatus, setTrackerRagStatus] = useState('');
+  const [trackerRemarks, setTrackerRemarks] = useState('');
   const [facilitatorFeedback, setFacilitatorFeedback] = useState('');
   const [schoolFeedback, setSchoolFeedback] = useState('');
   const [externalOrgName, setExternalOrgName] = useState('');
@@ -305,6 +307,8 @@ function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssis
     timeOut: timeOutValue, setTimeOut,
     rating, setRating,
     rag, setRag,
+    trackerRagStatus, setTrackerRagStatus,
+    trackerRemarks, setTrackerRemarks,
     facilitatorFeedback, setFacilitatorFeedback,
     schoolFeedback, setSchoolFeedback,
     externalOrgName, setExternalOrgName,
@@ -318,6 +322,8 @@ function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssis
       setTimeOut('');
       setFacilitatorFeedback('');
       setSchoolFeedback('');
+      setTrackerRagStatus('');
+      setTrackerRemarks('');
       setExternalOrgName('');
       setExternalResources('');
       setPhotosUploaded(false);
@@ -353,6 +359,8 @@ function toPsrFields(f) {
     studentsPresent: Number(f.studentsPresent) || 0,
     rating: f.rating,
     rag: f.rag,
+    trackerRagStatus: f.trackerRagStatus || null,
+    trackerRemarks: f.trackerRemarks || null,
     facilitatorFeedback: f.facilitatorFeedback,
     schoolFeedback: f.schoolFeedback,
     externalOrgName: f.externalOrgName || null,
@@ -426,6 +434,20 @@ function SessionFields({ f, date, facilitatorId, beneficiaryPicker }) {
         value={f.rag}
         onSelect={f.setRag}
         options={RAGS.map((r) => ({ value: r, label: r, color: ragColor(r) }))}
+      />
+
+      <Select
+        label="Tracker RAG status"
+        value={f.trackerRagStatus}
+        onSelect={f.setTrackerRagStatus}
+        options={[{ value: '', label: 'Not set' }, ...RAGS.map((r) => ({ value: r, label: r, color: ragColor(r) }))]}
+      />
+      <Field
+        label="Tracker remarks"
+        value={f.trackerRemarks}
+        onChangeText={f.setTrackerRemarks}
+        placeholder="Enter tracker remarks"
+        multiline
       />
 
       <Divider />
@@ -774,6 +796,12 @@ export default function SessionsScreen() {
               <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                 {p.date} - {p.studentsPresent} students - {p.rating}
               </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 3 }}>
+                Tracker RAG: {p.trackerRagStatus || '--'}
+              </Text>
+              {p.trackerRemarks ? (
+                <Text style={{ color: colors.textMuted, fontSize: 12 }}>Tracker remarks: {p.trackerRemarks}</Text>
+              ) : null}
               {asst && (
                 <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Assistant: {asst.name}</Text>
               )}

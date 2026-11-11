@@ -117,6 +117,8 @@ export default function AdminDashboardScreen() {
   const [editPsrStudents, setEditPsrStudents] = useState('');
   const [editPsrRating, setEditPsrRating] = useState('Good');
   const [editPsrRag, setEditPsrRag] = useState('Green');
+  const [editPsrTrackerRagStatus, setEditPsrTrackerRagStatus] = useState('');
+  const [editPsrTrackerRemarks, setEditPsrTrackerRemarks] = useState('');
   const [editPsrFacilitatorFeedback, setEditPsrFacilitatorFeedback] = useState('');
   const [editPsrSchoolFeedback, setEditPsrSchoolFeedback] = useState('');
   const [editPsrExternalOrgName, setEditPsrExternalOrgName] = useState('');
@@ -135,6 +137,8 @@ export default function AdminDashboardScreen() {
     setEditPsrStudents(String(p.studentsPresent ?? ''));
     setEditPsrRating(p.rating || 'Good');
     setEditPsrRag(p.rag || 'Green');
+    setEditPsrTrackerRagStatus(p.trackerRagStatus || '');
+    setEditPsrTrackerRemarks(p.trackerRemarks || '');
     setEditPsrFacilitatorFeedback(p.facilitatorFeedback || '');
     setEditPsrSchoolFeedback(p.schoolFeedback || '');
     setEditPsrExternalOrgName(p.externalOrgName || '');
@@ -191,6 +195,8 @@ export default function AdminDashboardScreen() {
         studentsPresent: Number(editPsrStudents) || 0,
         rating: editPsrRating,
         rag: editPsrRag,
+        trackerRagStatus: editPsrTrackerRagStatus || null,
+        trackerRemarks: editPsrTrackerRemarks || null,
         facilitatorFeedback: editPsrFacilitatorFeedback,
         schoolFeedback: editPsrSchoolFeedback,
         externalOrgName: editPsrExternalOrgName || null,
@@ -217,7 +223,7 @@ export default function AdminDashboardScreen() {
           if (!query) return true;
           const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
           const cat = db.categories.find((x) => x.id === p.categoryId);
-          const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag}`.toLowerCase();
+          const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag} ${p.trackerRagStatus} ${p.trackerRemarks}`.toLowerCase();
           return haystack.includes(query.toLowerCase());
         }),
     [db, facilitatorId, from, to, ragFilter, query]
@@ -487,6 +493,18 @@ export default function AdminDashboardScreen() {
                     onSelect={setEditPsrRag}
                     options={RAGS.map((r) => ({ value: r, label: r }))}
                   />
+                  <Select
+                    label="Tracker RAG status"
+                    value={editPsrTrackerRagStatus}
+                    onSelect={setEditPsrTrackerRagStatus}
+                    options={[{ value: '', label: 'Not set' }, ...RAGS.map((r) => ({ value: r, label: r }))]}
+                  />
+                  <Field
+                    label="Tracker remarks"
+                    value={editPsrTrackerRemarks}
+                    onChangeText={setEditPsrTrackerRemarks}
+                    multiline
+                  />
                   <Field
                     label="Facilitator feedback"
                     value={editPsrFacilitatorFeedback}
@@ -552,6 +570,8 @@ export default function AdminDashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time in: {p.timeIn || '--'}   Time out: {p.timeOut || '--'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Tracker RAG status: {p.trackerRagStatus || '-'}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13 }}>Tracker remarks: {p.trackerRemarks || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>School feedback: {p.schoolFeedback || '-'}</Text>
                       {p.externalOrgName ? (

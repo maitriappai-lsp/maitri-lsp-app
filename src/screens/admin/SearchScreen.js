@@ -146,6 +146,8 @@ const TABLE_CONFIGS = [
         categoryLabel(db, r.categoryId),
         r.rating,
         r.rag,
+        r.trackerRagStatus,
+        r.trackerRemarks,
         r.facilitatorFeedback,
         r.schoolFeedback,
         r.externalOrgName,
@@ -154,7 +156,7 @@ const TABLE_CONFIGS = [
         .filter(Boolean)
         .join(' '),
     summary: (r, db) =>
-      `${beneficiaryLabel(db, r.beneficiaryId)} \u00b7 ${r.date} \u00b7 ${categoryLabel(db, r.categoryId)} \u00b7 RAG: ${r.rag || '--'}`,
+      `${beneficiaryLabel(db, r.beneficiaryId)} \u00b7 ${r.date} \u00b7 ${categoryLabel(db, r.categoryId)} \u00b7 RAG: ${r.rag || '--'} \u00b7 Tracker RAG: ${r.trackerRagStatus || '--'}`,
   },
   {
     key: 'resources',
