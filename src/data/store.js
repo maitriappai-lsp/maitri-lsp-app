@@ -204,6 +204,12 @@ export function DataProvider({ children }) {
         return Array.from({ length: count }, (_, i) => `${prefix}-${String(start + i + 1).padStart(4, '0')}`);
       },
 
+      updateSystemParameters: (patch) => tracked(async () => {
+        const saved = await apiPatch('/api/system-parameters', patch);
+        setDb((prev) => ({ ...prev, systemParameters: saved }));
+        return saved;
+      }),
+
       // ---- domain-specific helpers --------------------------------------
       // Overrides get their id + timestamp from the server (an audit log
       // can't trust the client's clock), so this isn't optimistic -- it

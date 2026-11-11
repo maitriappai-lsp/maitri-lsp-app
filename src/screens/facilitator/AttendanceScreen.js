@@ -13,7 +13,7 @@
 // The location check runs automatically as soon as this screen opens (no
 // manual button tap needed) -- a re-check button is still there in case the
 // first attempt fails and they want to retry after moving. Time In stays
-// disabled until the check passes and the face check passes.
+// disabled until the location check passes and, when enabled in System Parameters, the face check passes.
 //
 // AUTOMATIC time out: once timed in, a continuous foreground location watch
 // (expo-location's watchPositionAsync) checks whether the facilitator is
@@ -50,7 +50,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
-import { registerGeofences, getDebugLog, clearDebugLog, isGeofencingTaskRegistered } from '../../background/geofenceTask';
+import { registerGeofences, unregisterGeofences, getDebugLog, clearDebugLog, isGeofencingTaskRegistered } from '../../background/geofenceTask';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
@@ -62,6 +62,8 @@ const EXIT_GRACE_MS = 90 * 1000;
 export default function AttendanceScreen() {
   const { currentUser } = useAuth();
   const { db, getBeneficiary, addRecord, updateRecord, nextId } = useData();
+  const faceRecognitionEnabled = db.systemParameters?.facilitatorFaceRecognitionEnabled !== false;
+  const gpsEnabled = db.systemParameters?.gpsOnBeneficiary !== false;
   const today = todayLocalYMD();
 
   const todaysSchedule = useMemo(
@@ -95,6 +97,22 @@ export default function AttendanceScreen() {
   async function refreshDebugLog() {
     setDebugLog(await getDebugLog());
   }
+
+  // When GPS is disabled, the full beneficiary list backs the manual
+  // selector. Keep it in sync with the shared data refresh without clearing
+  // a facilitator's current selection.
+  useEffect(() => {
+    if (gpsEnabled || resumedOpenSession || timeIn) return;
+    setCandidateBeneficiaries((previous) => {
+      const same = previous.length === db.beneficiaries.length && previous.every((item, index) => item.id === db.beneficiaries[index]?.id);
+      return same ? previous : db.beneficiaries;
+    });
+    setBeneficiaryId((current) => (
+      current && db.beneficiaries.some((item) => item.id === current)
+        ? current
+        : db.beneficiaries.length === 1 ? db.beneficiaries[0].id : null
+    ));
+  }, [gpsEnabled, db.beneficiaries, resumedOpenSession, timeIn]);
 
   const beneficiary = beneficiaryId ? getBeneficiary(beneficiaryId) : null;
   const isScheduled = beneficiary
@@ -135,8 +153,28 @@ export default function AttendanceScreen() {
       setTimeIn(open.timeIn);
       const openBeneficiary = getBeneficiary(open.beneficiaryId);
       setCheckedInGeoId(openBeneficiary?.geoId || null);
-    } else {
+    } else if (gpsEnabled) {
       checkLocation();
+    } else {
+      setGeoMatch(null);
+      setCheckFailed(false);
+      setCandidateBeneficiaries(db.beneficiaries);
+      setBeneficiaryId(db.beneficiaries.length === 1 ? db.beneficiaries[0].id : null);
+    }
+
+    // GPS-disabled attendance does not request location permission or start
+    // either foreground or background location monitoring.
+    if (!gpsEnabled) {
+      setAutoWatchMode(null);
+      setAutoWatching(false);
+      setAutoWatchFailReason(null);
+      unregisterGeofences().catch((e) => console.warn('Could not stop geofencing:', e?.message || e));
+      return () => {
+        if (watchSubRef.current) {
+          watchSubRef.current.remove();
+          watchSubRef.current = null;
+        }
+      };
     }
 
     // Start the foreground watcher right away as the working baseline --
@@ -190,7 +228,7 @@ export default function AttendanceScreen() {
     // Only on first mount -- re-checks after that are the explicit button,
     // and the watch subscription reads current state via stateRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
+  }, [currentUser?.id, gpsEnabled]);
 
   // Background geofence registration runs as its own effect, separate
   // from the mount effect above, specifically so it isn't attempted before
@@ -202,6 +240,10 @@ export default function AttendanceScreen() {
   // succeeded once (tracked via autoWatchMode, not re-registered on every
   // background poll/refresh).
   useEffect(() => {
+    if (!gpsEnabled) {
+      unregisterGeofences().catch((e) => console.warn('Could not stop geofencing:', e?.message || e));
+      return;
+    }
     if (!currentUser || autoWatchMode === 'background') return;
     if (!db.geo || db.geo.length === 0) return;
 
@@ -235,7 +277,7 @@ export default function AttendanceScreen() {
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id, db.geo.length, autoWatchMode]);
+  }, [currentUser?.id, db.geo.length, autoWatchMode, gpsEnabled]);
 
   function resetSession() {
     setGeoMatch(null);
@@ -252,6 +294,13 @@ export default function AttendanceScreen() {
   }
 
   async function checkLocation() {
+    if (!gpsEnabled) {
+      setGeoMatch(null);
+      setCheckFailed(false);
+      setCandidateBeneficiaries(db.beneficiaries);
+      setBeneficiaryId(db.beneficiaries.length === 1 ? db.beneficiaries[0].id : null);
+      return;
+    }
     resetSession();
     setChecking(true);
     try {
@@ -292,7 +341,7 @@ export default function AttendanceScreen() {
     setFaceVerified(true);
   }
 
-  const canMarkTime = !!geoMatch && !!beneficiary && faceVerified;
+  const canMarkTime = (!gpsEnabled || !!geoMatch) && !!beneficiary && (!faceRecognitionEnabled || faceVerified);
 
   async function markTimeIn() {
     // Safety net against a stale-state double time-in, on top of the
@@ -314,13 +363,13 @@ export default function AttendanceScreen() {
         date: today,
         timeIn: nowHHMM(),
         timeOut: '',
-        geoVerified: true,
+        geoVerified: gpsEnabled ? !!geoMatch : false,
         adHoc: !isScheduled,
       };
       const saved = await addRecord('attendance', record);
       setAttendanceRecordId(saved.id);
       setTimeIn(record.timeIn);
-      setCheckedInGeoId(geoMatch.id);
+      setCheckedInGeoId(gpsEnabled && geoMatch ? geoMatch.id : null);
       outsideSinceRef.current = null;
     } catch (e) {
       Alert.alert('Could not save time in', e.message || 'Please try again.');
@@ -436,7 +485,7 @@ export default function AttendanceScreen() {
             <SectionLabel>Open session from earlier today</SectionLabel>
             <Text style={{ color: colors.textMuted, fontSize: 13 }}>
               {beneficiary?.school} {beneficiary?.class} {beneficiary?.section} -- timed in at {timeIn}. Mark time
-              out below when the session ends, or leave the site and it'll be marked automatically.
+              out below when the session ends{gpsEnabled ? ', or leave the site and it will be marked automatically' : '. GPS-based automatic time-out is disabled'}.
             </Text>
           </Card>
         )}
@@ -455,43 +504,52 @@ export default function AttendanceScreen() {
               );
             })}
             <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
-              You're not limited to these -- checking in anywhere with a
-              registered geofence works, and it'll be flagged if it's not on
-              today's list.
+              {gpsEnabled
+                ? "You're not limited to these -- checking in anywhere with a registered geofence works, and it'll be flagged if it's not on today's list."
+                : "You can select any beneficiary for an attendance record; visits not on today's list are flagged as ad-hoc."}
             </Text>
           </Card>
         )}
 
         {!resumedOpenSession && (
           <Card>
-            <SectionLabel>Location check-in</SectionLabel>
-            {geoMatch && (
-              <Text style={{ color: colors.green, fontWeight: '700', marginBottom: spacing.sm }}>
-                Inside geofence: {geoMatch.school}{geoMatch.label ? ' - ' + geoMatch.label : ''} ({Math.round(geoMatch.distance)}m from centre)
-              </Text>
-            )}
-            {checkFailed && !geoMatch && (
-              <Text style={{ color: colors.red, fontWeight: '700', marginBottom: spacing.sm }}>
-                You're not currently inside any registered geofence. Attendance can't be marked until you are.
-              </Text>
-            )}
-            {checking ? (
-              <ActivityIndicator color={colors.primary} />
+            {gpsEnabled ? (
+              <>
+                <SectionLabel>Location check-in</SectionLabel>
+                {geoMatch && (
+                  <Text style={{ color: colors.green, fontWeight: '700', marginBottom: spacing.sm }}>
+                    Inside geofence: {geoMatch.school}{geoMatch.label ? ' - ' + geoMatch.label : ''} ({Math.round(geoMatch.distance)}m from centre)
+                  </Text>
+                )}
+                {checkFailed && !geoMatch && (
+                  <Text style={{ color: colors.red, fontWeight: '700', marginBottom: spacing.sm }}>
+                    You're not currently inside any registered geofence. Attendance can't be marked until you are.
+                  </Text>
+                )}
+                {checking ? <ActivityIndicator color={colors.primary} /> : (
+                  <SecondaryButton title={geoMatch ? 'Re-check location' : 'Check my location again'} onPress={checkLocation} />
+                )}
+                {candidateBeneficiaries.length > 1 && (
+                  <View style={{ marginTop: spacing.md }}>
+                    <SectionLabel>Multiple classes at this location -- which one are you with?</SectionLabel>
+                    <Select value={beneficiaryId} onSelect={setBeneficiaryId} options={candidateBeneficiaries.map((b) => ({ value: b.id, label: `${b.school} - ${b.class} ${b.section}` }))} />
+                  </View>
+                )}
+              </>
             ) : (
-              <SecondaryButton title={geoMatch ? 'Re-check location' : 'Check my location again'} onPress={checkLocation} />
-            )}
-
-            {candidateBeneficiaries.length > 1 && (
-              <View style={{ marginTop: spacing.md }}>
-                <SectionLabel>Multiple classes at this location -- which one are you with?</SectionLabel>
+              <>
+                <SectionLabel>Beneficiary selection</SectionLabel>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
+                  GPS verification is disabled. Select the beneficiary for this attendance record.
+                </Text>
                 <Select
                   value={beneficiaryId}
                   onSelect={setBeneficiaryId}
-                  options={candidateBeneficiaries.map((b) => ({ value: b.id, label: `${b.class} ${b.section}` }))}
+                  placeholder="Select beneficiary..."
+                  options={candidateBeneficiaries.map((b) => ({ value: b.id, label: `${b.school} - ${b.class} ${b.section}` }))}
                 />
-              </View>
+              </>
             )}
-
             {beneficiary && (
               <Text style={{ color: isScheduled ? colors.textMuted : colors.amber, fontSize: 12, marginTop: spacing.sm }}>
                 Checking in for: {beneficiary.school} {beneficiary.class} {beneficiary.section}
@@ -501,7 +559,7 @@ export default function AttendanceScreen() {
           </Card>
         )}
 
-        {!resumedOpenSession && (
+        {!resumedOpenSession && faceRecognitionEnabled && (
           <Card>
             <SectionLabel>Face check</SectionLabel>
             {faceVerified ? (
@@ -544,7 +602,7 @@ export default function AttendanceScreen() {
           )}
           {!canMarkTime && !timeIn && !resumedOpenSession && (
             <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
-              Check your location and pass the face check to enable time in.
+              {gpsEnabled ? 'Check your location' : 'Select a beneficiary'}{faceRecognitionEnabled ? ' and pass the face check' : ''} to enable time in.
             </Text>
           )}
           {!isScheduled && beneficiary && timeIn && (

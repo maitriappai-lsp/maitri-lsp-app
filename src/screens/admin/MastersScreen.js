@@ -16,6 +16,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -26,7 +27,7 @@ import { todayLocalYMD } from '../../utils/date';
 import { Screen, Card, Chip, Field, Select, PrimaryButton, SecondaryButton, SectionLabel, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
-const TABS = ['Resources', 'Geo', 'Beneficiaries', 'Life Skills'];
+const TABS = ['Resources', 'Geo', 'Beneficiaries', 'Life Skills', 'System Parameters'];
 
 export default function MastersScreen() {
   const [tab, setTab] = useState('Resources');
@@ -36,15 +37,16 @@ export default function MastersScreen() {
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.sm }}>
         Masters
       </Text>
-      <View style={{ flexDirection: 'row', marginBottom: spacing.md }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }} contentContainerStyle={{ flexDirection: 'row' }}>
         {TABS.map((t) => (
           <Chip key={t} label={t} active={tab === t} onPress={() => setTab(t)} />
         ))}
-      </View>
+      </ScrollView>
       {tab === 'Resources' && <ResourcesTab />}
       {tab === 'Geo' && <GeoTab />}
       {tab === 'Beneficiaries' && <BeneficiariesTab />}
       {tab === 'Life Skills' && <CategoriesTab />}
+      {tab === 'System Parameters' && <SystemParametersTab />}
     </Screen>
   );
 }
@@ -936,6 +938,91 @@ function GeoTab() {
         )
       )}
       <ImportFromExcel label="geo" table="geo" columnsHint="School, Label, Latitude, Longitude, Radius Meters" />
+    </ScrollView>
+  );
+}
+
+
+function SystemParametersTab() {
+  const { db, updateSystemParameters, refresh } = useData();
+  const faceEnabled = db.systemParameters?.facilitatorFaceRecognitionEnabled !== false;
+  const gpsEnabled = db.systemParameters?.gpsOnBeneficiary !== false;
+  const [saving, setSaving] = useState(false);
+
+  async function save(parameter, value) {
+    setSaving(true);
+    try {
+      await updateSystemParameters({ [parameter]: value });
+      const label = parameter === 'gpsOnBeneficiary' ? 'GPS attendance verification' : 'Facilitator face recognition';
+      Alert.alert('System parameter saved', `${label} is now ${value ? 'enabled' : 'disabled'}.`);
+    } catch (e) {
+      Alert.alert('Could not save setting', e.message || 'Please try again.');
+      try { await refresh(); } catch (_) {}
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function reset() {
+    Alert.alert(
+      'Reset system parameters',
+      'Restore the default settings? GPS attendance verification and facilitator face recognition will both be enabled.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset', onPress: async () => {
+          setSaving(true);
+          try {
+            await updateSystemParameters({ gpsOnBeneficiary: true });
+            await updateSystemParameters({ facilitatorFaceRecognitionEnabled: true });
+            Alert.alert('System parameters reset', 'GPS attendance verification and face recognition are enabled.');
+          } catch (e) {
+            Alert.alert('Could not reset settings', e.message || 'Please try again.');
+            try { await refresh(); } catch (_) {}
+          } finally {
+            setSaving(false);
+          }
+        } },
+      ]
+    );
+  }
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xl }}>
+      <Card>
+        <SectionLabel>Facilitator attendance</SectionLabel>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>GPS location verification</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+              When enabled, facilitators must be inside a registered geofence to check in. When disabled, they select the beneficiary manually and location-based auto time-out is disabled.
+            </Text>
+          </View>
+          <Switch value={gpsEnabled} onValueChange={(value) => save('gpsOnBeneficiary', value)} disabled={saving} trackColor={{ false: colors.border, true: colors.primary }} />
+        </View>
+        <Text style={{ color: gpsEnabled ? colors.green : colors.amber, fontWeight: '700', marginTop: spacing.sm }}>
+          GPS verification: {gpsEnabled ? 'Enabled' : 'Disabled'}{saving ? ' -- saving...' : ''}
+        </Text>
+        <View style={{ height: spacing.lg }} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Face recognition</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+              When enabled, facilitators must complete the face check before marking attendance time in. When disabled, the face check is skipped.
+            </Text>
+          </View>
+          <Switch value={faceEnabled} onValueChange={(value) => save('facilitatorFaceRecognitionEnabled', value)} disabled={saving} trackColor={{ false: colors.border, true: colors.primary }} />
+        </View>
+        <Text style={{ color: faceEnabled ? colors.green : colors.amber, fontWeight: '700', marginTop: spacing.sm }}>
+          Face recognition: {faceEnabled ? 'Enabled' : 'Disabled'}{saving ? ' -- saving...' : ''}
+        </Text>
+      </Card>
+      <Card>
+        <SectionLabel>Reset parameters</SectionLabel>
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.md }}>
+          Restore both attendance settings to their defaults: GPS verification Enabled and face recognition Enabled.
+        </Text>
+        <SecondaryButton title="Reset to defaults" onPress={reset} disabled={saving || (gpsEnabled && faceEnabled)} />
+      </Card>
     </ScrollView>
   );
 }

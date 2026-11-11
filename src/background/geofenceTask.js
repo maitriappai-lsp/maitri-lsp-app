@@ -163,6 +163,22 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
       return;
     }
 
+    // An administrator can disable GPS attendance while this task remains
+    // registered with the operating system. Re-read the shared setting before
+    // applying any location-based time-out, and fail closed if it is unavailable.
+    const settingsRes = await fetch(`${API_BASE_URL}/api/system-parameters`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!settingsRes.ok) {
+      await logDebug(`skipped: could not read system parameters (HTTP ${settingsRes.status})`);
+      return;
+    }
+    const settings = await settingsRes.json();
+    if (settings.gpsOnBeneficiary === false) {
+      await logDebug('skipped: GPS attendance verification is disabled');
+      return;
+    }
+
     const date = todayLocalYMD();
     const openRes = await fetch(`${API_BASE_URL}/api/attendance-open?date=${date}`, {
       headers: { Authorization: `Bearer ${token}` },
