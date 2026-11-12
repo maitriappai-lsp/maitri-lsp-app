@@ -5,7 +5,7 @@
 //
 // Layout: each tab shows its list of records first, with a round "+" button
 // at the top right. Tapping "+" opens the Add form in a bottom-sheet popup.
-// Row actions (edit / deactivate / delete) are compact icons.
+// Row actions (edit / reset password / deactivate / delete) are compact icons.
 import React, { useState } from 'react';
 import {
   ScrollView,
@@ -258,7 +258,7 @@ function ImportFromExcel({ label, table, columnsHint }) {
 }
 
 function ResourcesTab() {
-  const { db, addRecord, updateRecord, deleteRecord, nextId } = useData();
+  const { db, addRecord, updateRecord, deleteRecord, resetPassword, nextId } = useData();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [type, setType] = useState('Volunteer');
@@ -360,6 +360,28 @@ function ResourcesTab() {
     } finally {
       setSavingEdit(false);
     }
+  }
+
+  function confirmResetPassword(r) {
+    Alert.alert(
+      'Reset password',
+      `Reset ${r.name}'s password to changeme123? They'll be asked to choose a new one at next login.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await resetPassword(r.id);
+              Alert.alert('Password reset', `${r.name}'s password is now changeme123.`);
+            } catch (e) {
+              Alert.alert('Could not reset', e.message || 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function toggleActive(r) {
@@ -480,6 +502,12 @@ function ResourcesTab() {
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                 <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(r)} />
+                <IconButton
+                  name="key-outline"
+                  color={colors.textMuted}
+                  label="Reset password"
+                  onPress={() => confirmResetPassword(r)}
+                />
                 <IconButton
                   name={isActive ? 'pause-circle-outline' : 'play-circle-outline'}
                   color={isActive ? colors.amber : colors.green}

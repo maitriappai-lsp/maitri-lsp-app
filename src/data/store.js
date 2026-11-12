@@ -241,6 +241,17 @@ export function DataProvider({ children }) {
         return user;
       }),
 
+      // Admin only: sets the resource's password back to the default and
+      // forces a change at next login (the server does the work).
+      resetPassword: (resourceId) => tracked(async () => {
+        const { user } = await apiPost('/api/auth/reset-password', { resourceId });
+        setDb((prev) => ({
+          ...prev,
+          resources: prev.resources.map((r) => (r.id === resourceId ? { ...r, ...user } : r)),
+        }));
+        return user;
+      }),
+
       // ---- lookups (unchanged -- local array finds against the cached db) --
       getBeneficiary: (id) => db.beneficiaries.find((b) => b.id === id),
       getCategory: (id) => db.categories.find((c) => c.id === id),
