@@ -2,6 +2,7 @@
 // must happen before anything else, including on a headless launch where
 // the OS starts the app purely to run this task with no screen opened.
 import './src/background/geofenceTask';
+import './src/background/presenceTask';
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';

@@ -49,6 +49,7 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Maitri LSP to check you are at the school for attendance, and to automatically mark time out when you leave -- including when the app is closed or your phone is locked.",
           "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
           "isIosBackgroundLocationEnabled": true
         }
       ],

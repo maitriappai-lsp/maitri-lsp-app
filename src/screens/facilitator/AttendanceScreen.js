@@ -51,6 +51,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { findGeofenceMatch } from '../../utils/geofence';
 import { registerGeofences, unregisterGeofences, getDebugLog, clearDebugLog, isGeofencingTaskRegistered } from '../../background/geofenceTask';
+import { startPresenceMonitor, stopPresenceMonitor } from '../../background/presenceTask';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD, nowHHMM } from '../../utils/date';
@@ -282,6 +283,23 @@ export default function AttendanceScreen() {
       cancelled = true;
     };
   }, [currentUser?.id, db.geo.length, autoWatchMode, gpsEnabled]);
+
+  // Presence monitor: while a GPS-verified session is open, a foreground
+  // service polls the phone's position and times out once it has left the
+  // check-in geofence (Android's own geofence Exit events alone can be
+  // delayed for a very long time). Starts after time-in -- or when an open
+  // session is resumed -- and stops once the session is timed out.
+  useEffect(() => {
+    if (!gpsEnabled) return;
+    if (timeOut) {
+      stopPresenceMonitor().catch(() => {});
+      return;
+    }
+    if (!timeIn || !attendanceRecordId || !checkedInGeoId) return;
+    const geo = db.geo.find((g) => g.id === checkedInGeoId);
+    if (!geo) return;
+    startPresenceMonitor({ recordId: attendanceRecordId, geo }).catch(() => {});
+  }, [gpsEnabled, timeIn, timeOut, attendanceRecordId, checkedInGeoId, db.geo]);
 
   function resetSession() {
     setGeoMatch(null);

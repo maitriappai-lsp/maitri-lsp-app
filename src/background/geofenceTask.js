@@ -38,63 +38,15 @@ import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
+import { logDebug, getDebugLog, clearDebugLog } from './debugLog';
+import { stopPresenceMonitor } from './presenceTask';
+
+// AttendanceScreen imports these from here.
+export { getDebugLog, clearDebugLog };
 import { isFacilitatorRole } from '../utils/roles';
 
 export const GEOFENCE_TASK = 'maitri-geofence-task';
 const SESSION_KEY = 'maitri-lsp-session-v1';
-const DEBUG_LOG_PREFIX = 'maitri-geofence-debug-log:';
-const DEBUG_LOG_MAX_KEPT = 50;
-
-// A release APK has no connected dev machine to watch console output on,
-// so console.log/warn from a background task is otherwise invisible. This
-// writes a rolling log to AsyncStorage instead, which the Attendance
-// screen can read and display -- the only practical way to see what the
-// background task actually did (or didn't do) on a real device.
-//
-// Each entry gets its OWN key (timestamp + random suffix) rather than
-// being appended via read-modify-write to one shared key. Real-device
-// testing showed the read-modify-write version silently losing entries
-// when two geofence events fired close together and their logDebug calls
-// overlapped -- one invocation's write clobbered the other's, instead of
-// both landing. Independent keys can't collide this way.
-async function logDebug(msg) {
-  try {
-    const key = `${DEBUG_LOG_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await AsyncStorage.setItem(key, JSON.stringify({ t: new Date().toISOString(), msg }));
-
-    // Light pruning so storage doesn't grow unbounded over days of
-    // testing -- keep only the most recent DEBUG_LOG_MAX_KEPT entries.
-    const allKeys = await AsyncStorage.getAllKeys();
-    const logKeys = allKeys.filter((k) => k.startsWith(DEBUG_LOG_PREFIX)).sort();
-    if (logKeys.length > DEBUG_LOG_MAX_KEPT) {
-      await AsyncStorage.multiRemove(logKeys.slice(0, logKeys.length - DEBUG_LOG_MAX_KEPT));
-    }
-  } catch (e) {
-    // Logging itself failing isn't worth crashing over.
-  }
-}
-
-export async function getDebugLog() {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const logKeys = allKeys.filter((k) => k.startsWith(DEBUG_LOG_PREFIX)).sort();
-    const pairs = await AsyncStorage.multiGet(logKeys);
-    return pairs.map(([, v]) => JSON.parse(v));
-  } catch (e) {
-    return [];
-  }
-}
-
-export async function clearDebugLog() {
-  try {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const logKeys = allKeys.filter((k) => k.startsWith(DEBUG_LOG_PREFIX));
-    await AsyncStorage.multiRemove(logKeys);
-  } catch (e) {
-    // Fine to leave old entries if this fails -- not worth crashing over.
-  }
-}
-
 function todayLocalYMD() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -159,6 +111,11 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
 
 if (eventType !== Location.GeofencingEventType.Exit) return;
 
+  // Stamp the exit time the moment the event arrives. If the OS freezes this
+  // task mid-network-call and resumes it later (e.g. when the app wakes up
+  // again), the recorded time-out is still when the facilitator actually left.
+  const exitedAt = nowHHMM();
+
   try {
     const raw = await AsyncStorage.getItem(SESSION_KEY);
     if (!raw) {
@@ -172,25 +129,27 @@ if (eventType !== Location.GeofencingEventType.Exit) return;
     }
 
     // An administrator can disable GPS attendance while this task remains
-    // registered with the operating system. Re-read the shared setting before
-    // applying any location-based time-out, and fail closed if it is unavailable.
-    const settingsRes = await fetch(`${API_BASE_URL}/api/system-parameters`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!settingsRes.ok) {
-      await logDebug(`skipped: could not read system parameters (HTTP ${settingsRes.status})`);
-      return;
-    }
-    const settings = await settingsRes.json();
-    if (settings.gpsOnBeneficiary === false) {
+    // registered with the operating system, so the shared setting is still
+    // checked -- but IN PARALLEL with the open-record lookup, not before it.
+    // Two sequential requests made the task much easier for the OS to freeze
+    // mid-flight (especially when the backend is cold-starting), which showed
+    // up as a time-out that only completed once the phone came back into the
+    // radius. A slow/failed settings read no longer blocks the time-out; only
+    // an explicit gpsOnBeneficiary === false skips it.
+    const date = todayLocalYMD();
+    const authHeaders = { Authorization: `Bearer ${token}` };
+    const [settings, openRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/system-parameters`, { headers: authHeaders })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      fetch(`${API_BASE_URL}/api/attendance-open?date=${date}`, { headers: authHeaders }),
+    ]);
+    if (settings === null) {
+      await logDebug('could not read system parameters -- continuing with time-out');
+    } else if (settings.gpsOnBeneficiary === false) {
       await logDebug('skipped: GPS attendance verification is disabled');
       return;
     }
-
-    const date = todayLocalYMD();
-    const openRes = await fetch(`${API_BASE_URL}/api/attendance-open?date=${date}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
     if (!openRes.ok) {
       await logDebug(`skipped: /api/attendance-open returned HTTP ${openRes.status}`);
       return;
@@ -228,7 +187,7 @@ if (eventType !== Location.GeofencingEventType.Exit) return;
     // why it can take a while to trigger), so leaning on that instead of
     // adding a second layer of debounce here trades a little jitter
     // protection for the task actually completing.
-    const timeOut = nowHHMM();
+    const timeOut = exitedAt;
     const patchRes = await fetch(`${API_BASE_URL}/api/attendance/${record.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -239,6 +198,7 @@ if (eventType !== Location.GeofencingEventType.Exit) return;
         ? `timed out successfully at ${timeOut} (record ${record.id})`
         : `PATCH failed: HTTP ${patchRes.status}`
     );
+    if (patchRes.ok) await stopPresenceMonitor();
   } catch (e) {
     await logDebug(`task threw: ${e?.message || e}`);
   }

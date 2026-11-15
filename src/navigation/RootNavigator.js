@@ -7,6 +7,7 @@ import FacilitatorTabs from './FacilitatorTabs';
 import AdminTabs from './AdminTabs';
 import { colors, spacing } from '../theme';
 import { todayLocalYMD, nowHHMM } from '../utils/date';
+import { stopPresenceMonitor } from '../background/presenceTask';
 
 function TopBar() {
   const { currentUser, logout } = useAuth();
@@ -31,6 +32,7 @@ function TopBar() {
       // Don't block sign-out over this -- surface it, but still sign out.
       Alert.alert('Note', "Couldn't auto-complete today's open attendance session, but you're signed out.");
     } finally {
+      stopPresenceMonitor().catch(() => {});
       setSigningOut(false);
       logout();
     }
