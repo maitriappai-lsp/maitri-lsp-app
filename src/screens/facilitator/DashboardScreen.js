@@ -13,7 +13,7 @@ import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { todayLocalYMD } from '../../utils/date';
-import { latestFirst } from '../../utils/sort';
+import { latestFirst, upcomingThenPast } from '../../utils/sort';
 import { usesSessions } from '../../utils/roles';
 
 const TABS = ['Overview', 'Schedule', 'Attendance', 'Sessions', 'Uploads'];
@@ -68,7 +68,7 @@ export default function DashboardScreen() {
         // Sessions where I'm the facilitator OR the assistant.
         .filter((s) => s.facilitatorId === currentUser?.id || s.assistantId === currentUser?.id)
         .filter((s) => s.date >= from && s.date <= to)
-        .sort(latestFirst('time')),
+        .sort(upcomingThenPast),
     [db, currentUser, from, to]
   );
 
