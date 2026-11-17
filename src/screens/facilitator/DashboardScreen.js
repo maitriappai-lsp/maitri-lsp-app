@@ -204,7 +204,6 @@ export default function DashboardScreen() {
                     <View style={{ marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm }}>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Assistant: {sessionAssistant?.name || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
-                      <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Tracker RAG status: {p.trackerRagStatus || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Tracker remarks: {p.trackerRemarks || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time: {p.timeIn} - {p.timeOut}</Text>

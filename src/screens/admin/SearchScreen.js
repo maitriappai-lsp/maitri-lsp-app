@@ -144,7 +144,6 @@ const TABLE_CONFIGS = [
         r.assistantId && resourceName(db, r.assistantId),
         r.date,
         categoryLabel(db, r.categoryId),
-        r.rating,
         r.rag,
         r.trackerRagStatus,
         r.trackerRemarks,

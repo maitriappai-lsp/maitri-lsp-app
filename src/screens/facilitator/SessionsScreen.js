@@ -4,7 +4,7 @@
 //
 // Attendance's Time In creates a row in the separate `attendance` table
 // (check-in/check-out, geofence/face verification, ad-hoc flag) -- this
-// screen's job is the session-quality side: category, rating, feedback.
+// screen's job is the session-quality side: category, RAG, feedback.
 //
 // Layout: the list of my session records comes first, with a round "+"
 // button at the top right (showing a red count when check-ins are waiting
@@ -43,7 +43,6 @@ import {
 import { colors, spacing, ragColor } from '../../theme';
 import { todayLocalYMD, parseTimeToMinutes, isFutureTime } from '../../utils/date';
 
-const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
 
 // The assistant is optional. Select needs a real value for every option, so
@@ -289,7 +288,6 @@ function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssis
   const [studentsPresent, setStudentsPresent] = useState('');
   const [timeInValue, setTimeIn] = useState(timeIn);
   const [timeOutValue, setTimeOut] = useState(timeOut);
-  const [rating, setRating] = useState('Good');
   const [rag, setRag] = useState('Green');
   const [trackerRagStatus, setTrackerRagStatus] = useState('');
   const [trackerRemarks, setTrackerRemarks] = useState('');
@@ -305,7 +303,6 @@ function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssis
     studentsPresent, setStudentsPresent,
     timeIn: timeInValue, setTimeIn,
     timeOut: timeOutValue, setTimeOut,
-    rating, setRating,
     rag, setRag,
     trackerRagStatus, setTrackerRagStatus,
     trackerRemarks, setTrackerRemarks,
@@ -314,7 +311,7 @@ function useSessionFields({ timeIn = '', timeOut = '', assistantId: initialAssis
     externalOrgName, setExternalOrgName,
     externalResources, setExternalResources,
     photosUploaded, setPhotosUploaded,
-    // Clears what's specific to one visit, keeping category/rating/RAG.
+    // Clears what's specific to one visit, keeping category/RAG.
     reset() {
       setAssistantId(NO_ASSISTANT);
       setStudentsPresent('');
@@ -357,7 +354,6 @@ function toPsrFields(f) {
     categoryId: f.categoryId,
     assistantId: f.assistantId === NO_ASSISTANT ? null : f.assistantId,
     studentsPresent: Number(f.studentsPresent) || 0,
-    rating: f.rating,
     rag: f.rag,
     trackerRagStatus: f.trackerRagStatus || null,
     trackerRemarks: f.trackerRemarks || null,
@@ -423,12 +419,6 @@ function SessionFields({ f, date, facilitatorId, beneficiaryPicker }) {
         keyboardType="number-pad"
       />
 
-      <ChoiceRow
-        label="Rating (session quality)"
-        value={f.rating}
-        onSelect={f.setRating}
-        options={RATINGS.map((r) => ({ value: r, label: r }))}
-      />
       <ChoiceRow
         label="RAG status (required)"
         value={f.rag}
@@ -797,7 +787,7 @@ export default function SessionsScreen() {
                 <RagChip rag={p.rag} />
               </View>
               <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                {p.date} - {p.studentsPresent} students - {p.rating}
+                {p.date} - {p.studentsPresent} students
               </Text>
               <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 3 }}>
                 Tracker RAG: {p.trackerRagStatus || '--'}

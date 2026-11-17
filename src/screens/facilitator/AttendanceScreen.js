@@ -39,13 +39,13 @@
 // Marking Time In creates a real attendance record (geoVerified: true,
 // adHoc: true if it wasn't scheduled) so it shows up in both dashboards'
 // Attendance tab. Marking (or auto-marking) Time Out updates that same
-// record. The session-quality side (category, rating, feedback, headcount)
+// record. The session-quality side (category, RAG status, feedback, headcount)
 // is filled in afterward on the Sessions screen, which lists today's
 // checked-in records to finish -- and refuses to let a session be logged at
 // all for a day with no attendance record, so PSR can't exist without a
 // real check-in behind it.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, Text, View, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { ScrollView, Text, View, Alert, ActivityIndicator, TouchableOpacity, AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
@@ -289,6 +289,19 @@ export default function AttendanceScreen() {
   // check-in geofence (Android's own geofence Exit events alone can be
   // delayed for a very long time). Starts after time-in -- or when an open
   // session is resumed -- and stops once the session is timed out.
+  //
+  // Android refuses to start a foreground service while the app isn't fully
+  // in the foreground (e.g. right after a permission screen closes), so a
+  // failed start is retried shortly after, and again whenever the app comes
+  // back to the foreground. Starting is idempotent, so retries are harmless.
+  const [presenceRetry, setPresenceRetry] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setPresenceRetry((n) => n + 1);
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     if (!gpsEnabled) return;
     if (timeOut) {
@@ -298,8 +311,18 @@ export default function AttendanceScreen() {
     if (!timeIn || !attendanceRecordId || !checkedInGeoId) return;
     const geo = db.geo.find((g) => g.id === checkedInGeoId);
     if (!geo) return;
-    startPresenceMonitor({ recordId: attendanceRecordId, geo }).catch(() => {});
-  }, [gpsEnabled, timeIn, timeOut, attendanceRecordId, checkedInGeoId, db.geo]);
+    let retryTimer = null;
+    startPresenceMonitor({ recordId: attendanceRecordId, geo })
+      .then((r) => {
+        if (!r.ok && r.reason === 'exception') {
+          retryTimer = setTimeout(() => setPresenceRetry((n) => n + 1), 4000);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [gpsEnabled, timeIn, timeOut, attendanceRecordId, checkedInGeoId, db.geo, presenceRetry]);
 
   function resetSession() {
     setGeoMatch(null);
@@ -690,7 +713,7 @@ async function markTimeIn() {
           )}
           {scheduleApplies && timeOut && (
             <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.sm }}>
-              Head to Sessions to log the category, rating and headcount for this visit.
+              Head to Sessions to log the category, RAG status and headcount for this visit.
             </Text>
           )}
         </Card>

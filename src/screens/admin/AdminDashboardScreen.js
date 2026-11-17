@@ -30,7 +30,6 @@ const latestFirst = (timeKey) => (a, b) => {
   return tb - ta;
 };
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
-const RATINGS = ['Excellent', 'Good', 'Needs follow-up'];
 const RAGS = ['Green', 'Amber', 'Red'];
 
 // Compact chip selector, matching the facilitator session RAG control.
@@ -149,7 +148,6 @@ export default function AdminDashboardScreen() {
   const [editPsrTimeIn, setEditPsrTimeIn] = useState('');
   const [editPsrTimeOut, setEditPsrTimeOut] = useState('');
   const [editPsrStudents, setEditPsrStudents] = useState('');
-  const [editPsrRating, setEditPsrRating] = useState('Good');
   const [editPsrRag, setEditPsrRag] = useState('Green');
   const [editPsrTrackerRagStatus, setEditPsrTrackerRagStatus] = useState('');
   const [editPsrTrackerRemarks, setEditPsrTrackerRemarks] = useState('');
@@ -169,7 +167,6 @@ export default function AdminDashboardScreen() {
     setEditPsrTimeIn(p.timeIn || '');
     setEditPsrTimeOut(p.timeOut || '');
     setEditPsrStudents(String(p.studentsPresent ?? ''));
-    setEditPsrRating(p.rating || 'Good');
     setEditPsrRag(p.rag || 'Green');
     setEditPsrTrackerRagStatus(p.trackerRagStatus || '');
     setEditPsrTrackerRemarks(p.trackerRemarks || '');
@@ -227,7 +224,6 @@ export default function AdminDashboardScreen() {
         timeIn: editPsrTimeIn,
         timeOut: editPsrTimeOut,
         studentsPresent: Number(editPsrStudents) || 0,
-        rating: editPsrRating,
         rag: editPsrRag,
         trackerRagStatus: editPsrTrackerRagStatus || null,
         trackerRemarks: editPsrTrackerRemarks || null,
@@ -532,12 +528,6 @@ export default function AdminDashboardScreen() {
                     keyboardType="number-pad"
                   />
                   <Select
-                    label="Rating"
-                    value={editPsrRating}
-                    onSelect={setEditPsrRating}
-                    options={RATINGS.map((r) => ({ value: r, label: r }))}
-                  />
-                  <Select
                     label="RAG status"
                     value={editPsrRag}
                     onSelect={setEditPsrRag}
@@ -622,7 +612,6 @@ export default function AdminDashboardScreen() {
                       <Text style={{ color: colors.text, fontSize: 13 }}>Assistant: {sessionAssistant?.name || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Time in: {p.timeIn || '--'}   Time out: {p.timeOut || '--'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Students present: {p.studentsPresent}</Text>
-                      <Text style={{ color: colors.text, fontSize: 13 }}>Rating: {p.rating}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Tracker RAG status: {p.trackerRagStatus || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Tracker remarks: {p.trackerRemarks || '-'}</Text>
                       <Text style={{ color: colors.text, fontSize: 13 }}>Facilitator feedback: {p.facilitatorFeedback || '-'}</Text>
