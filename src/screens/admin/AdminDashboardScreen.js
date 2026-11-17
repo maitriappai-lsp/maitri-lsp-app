@@ -14,6 +14,7 @@ import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Sel
 import { colors, spacing, ragColor } from '../../theme';
 import { todayLocalYMD, isFutureTime, parseTimeToMinutes } from '../../utils/date';
 import { isFacilitatorRole } from '../../utils/roles';
+import { beneficiaryLabel } from '../../utils/beneficiary';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
 
@@ -210,7 +211,7 @@ export default function AdminDashboardScreen() {
       const b = db.beneficiaries.find((x) => x.id === editPsrBeneficiaryId);
       Alert.alert(
         'No matching attendance record',
-        `${b?.school || 'This beneficiary'} has no attendance record for ${psr.facilitatorId ? db.resources.find((r) => r.id === psr.facilitatorId)?.name : 'this facilitator'} on ${editPsrDate}. Create or correct that attendance record first (Attendance tab, or Attendance Override), then edit this session again.`
+        `${beneficiaryLabel(b, 'This beneficiary')} has no attendance record for ${psr.facilitatorId ? db.resources.find((r) => r.id === psr.facilitatorId)?.name : 'this facilitator'} on ${editPsrDate}. Create or correct that attendance record first (Attendance tab, or Attendance Override), then edit this session again.`
       );
       return;
     }
@@ -256,7 +257,7 @@ export default function AdminDashboardScreen() {
           if (!query) return true;
           const b = db.beneficiaries.find((x) => x.id === p.beneficiaryId);
           const cat = db.categories.find((x) => x.id === p.categoryId);
-          const haystack = `${b?.school} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag} ${p.trackerRagStatus} ${p.trackerRemarks}`.toLowerCase();
+          const haystack = `${beneficiaryLabel(b)} ${cat?.pillar} ${p.facilitatorFeedback} ${p.schoolFeedback} ${p.rag} ${p.trackerRagStatus} ${p.trackerRemarks}`.toLowerCase();
           return haystack.includes(query.toLowerCase());
         })
         .sort(latestFirst('timeIn')),
@@ -268,12 +269,26 @@ export default function AdminDashboardScreen() {
       db.attendance
         .filter((a) => (facilitatorId === 'all' ? true : a.facilitatorId === facilitatorId))
         .filter((a) => a.date >= from && a.date <= to)
+        .filter((a) => {
+          if (!query) return true;
+          const b = db.beneficiaries.find((x) => x.id === a.beneficiaryId);
+          const f = db.resources.find((x) => x.id === a.facilitatorId);
+          const haystack = `${beneficiaryLabel(b)} ${f?.name || ''} ${a.date} ${a.timeIn || ''} ${a.timeOut || ''}`.toLowerCase();
+          return haystack.includes(query.toLowerCase());
+        })
         .sort(latestFirst('timeIn')),
-    [db, facilitatorId, from, to]
+    [db, facilitatorId, from, to, query]
   );
 
   const uploads = db.uploads
     .filter((u) => (facilitatorId === 'all' ? true : u.facilitatorId === facilitatorId) && u.date >= from && u.date <= to)
+    .filter((u) => {
+      if (!query) return true;
+      const b = db.beneficiaries.find((x) => x.id === u.beneficiaryId);
+      const f = db.resources.find((x) => x.id === u.facilitatorId);
+      const haystack = `${u.fileName || ''} ${beneficiaryLabel(b)} ${f?.name || ''} ${u.date}`.toLowerCase();
+      return haystack.includes(query.toLowerCase());
+    })
     .sort(latestFirst(null));
 
   const [exporting, setExporting] = useState(false);
@@ -356,7 +371,7 @@ export default function AdminDashboardScreen() {
       </Card>
 
       <Field
-        label="Search remarks, feedback, RAG, beneficiary or category"
+        label="Search beneficiary, class, facilitator, remarks, feedback, RAG or category"
         value={query}
         onChangeText={setQuery}
         placeholder="e.g. empathy, red, Canal road"
@@ -457,7 +472,7 @@ export default function AdminDashboardScreen() {
                           }}
                         >
                           <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, flex: 1, marginRight: spacing.sm }}>
-                            Editing session -- {b?.school}
+                            Editing session -- {beneficiaryLabel(b)}
                           </Text>
                           <TouchableOpacity
                             onPress={() => setEditingPsrId(null)}
@@ -596,7 +611,7 @@ export default function AdminDashboardScreen() {
               <TouchableOpacity onPress={() => setExpandedId(isOpen ? null : p.id)}>
                 <Card>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontWeight: '700', color: colors.text }}>{b?.school}</Text>
+                    <Text style={{ fontWeight: '700', color: colors.text, flex: 1, paddingRight: spacing.sm }}>{beneficiaryLabel(b)}</Text>
                     <RagChip rag={p.rag} />
                   </View>
                   <Text style={{ color: colors.textMuted, fontSize: 13 }}>
@@ -651,7 +666,7 @@ export default function AdminDashboardScreen() {
                   <View style={{ flex: 1, paddingRight: spacing.sm }}>
                     <Text style={{ fontWeight: '700', color: colors.text }}>{u.fileName}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                      {f?.name} - {b?.school} - {u.date}
+                      {f?.name} - {beneficiaryLabel(b)} - {u.date}
                     </Text>
                   </View>
                   {u.fileUrl ? (
@@ -748,7 +763,7 @@ export default function AdminDashboardScreen() {
                       )}
                     </View>
                     <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                      {a.date} - {b?.school} {b?.class} {b?.section}
+                      {a.date} - {beneficiaryLabel(b)}
                     </Text>
                     <Text style={{ color: colors.text, fontSize: 13 }}>
                       Time in: {a.timeIn || '--'}   Time out: {a.timeOut || '--'}

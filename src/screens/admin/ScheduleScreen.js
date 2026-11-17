@@ -24,6 +24,7 @@ import { apiPost } from '../../data/api';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField, TimeField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { parseTimeToMinutes, todayLocalYMD } from '../../utils/date';
+import { beneficiaryLabel } from '../../utils/beneficiary';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const DAY_INDEX = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
@@ -69,7 +70,7 @@ function findConflicts(db, entry, ignoreId) {
 function describeConflict(db, c) {
   const name = (id) => db.resources.find((r) => r.id === id)?.name || id;
   const b = db.beneficiaries.find((x) => x.id === c.sched.beneficiaryId);
-  return `${c.people.map(name).join(' & ')} already booked at ${c.sched.time}${b ? ` (${b.school})` : ''}`;
+  return `${c.people.map(name).join(' & ')} already booked at ${c.sched.time}${b ? ` (${beneficiaryLabel(b)})` : ''}`;
 }
 
 // First problem with a schedule entry ({ date, time, beneficiaryId,
@@ -581,7 +582,7 @@ export default function ScheduleScreen() {
               <Card key={s.id}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <View style={{ flex: 1, marginRight: spacing.sm }}>
-                    <Text style={{ fontWeight: '700', color: colors.text }}>{b?.school}</Text>
+                    <Text style={{ fontWeight: '700', color: colors.text }}>{beneficiaryLabel(b)}</Text>
                     <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                       {s.date} - {s.time} - {f?.name} assigned
                     </Text>
@@ -613,7 +614,7 @@ export default function ScheduleScreen() {
                       color={colors.red}
                       label="Delete"
                       onPress={() =>
-                        Alert.alert('Delete session', `Remove ${b?.school} on ${s.date}?`, [
+                        Alert.alert('Delete session', `Remove ${beneficiaryLabel(b)} on ${s.date}?`, [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('schedule', s.id) },
                         ])
