@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import { ROLE_OPTIONS } from '../../utils/roles';
+import { newestFirstById } from '../../utils/sort';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
 import { todayLocalYMD } from '../../utils/date';
@@ -447,7 +448,7 @@ function ResourcesTab() {
         <PrimaryButton title={saving ? 'Saving...' : 'Add resource'} onPress={addResource} disabled={saving} />
       </AddModal>
 
-      {db.resources.map((r) => {
+      {[...db.resources].sort(newestFirstById).map((r) => {
         const isActive = r.active !== false;
         return editingId === r.id ? (
           <Card key={r.id}>
@@ -655,7 +656,7 @@ function BeneficiariesTab() {
         <PrimaryButton title={saving ? 'Saving...' : 'Add beneficiary'} onPress={add} disabled={saving} />
       </AddModal>
 
-      {db.beneficiaries.map((b) => {
+      {[...db.beneficiaries].sort(newestFirstById).map((b) => {
         const g = getGeo(b.geoId);
         return editingId === b.id ? (
           <Card key={b.id}>
@@ -785,7 +786,7 @@ function CategoriesTab() {
         <PrimaryButton title={saving ? 'Saving...' : 'Add Life Skill'} onPress={add} disabled={saving} />
       </AddModal>
 
-      {db.categories.map((c) =>
+      {[...db.categories].sort(newestFirstById).map((c) =>
         editingId === c.id ? (
           <Card key={c.id}>
             <SectionLabel>Edit category</SectionLabel>
@@ -976,7 +977,7 @@ function GeoTab() {
         <PrimaryButton title={saving ? 'Saving...' : 'Add geofence'} onPress={add} disabled={saving} />
       </AddModal>
 
-      {db.geo.map((g) =>
+      {[...db.geo].sort(newestFirstById).map((g) =>
         editingId === g.id ? (
           <Card key={g.id}>
             <SectionLabel>Edit geofence -- {g.school}</SectionLabel>

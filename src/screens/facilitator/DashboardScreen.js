@@ -12,25 +12,14 @@ import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, SecondaryButton, DateField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { todayLocalYMD, parseTimeToMinutes } from '../../utils/date';
+import { todayLocalYMD } from '../../utils/date';
+import { latestFirst } from '../../utils/sort';
 import { usesSessions } from '../../utils/roles';
 
 const TABS = ['Overview', 'Schedule', 'Attendance', 'Sessions', 'Uploads'];
 // Roles without Schedule/Sessions only get these tabs.
 const LIMITED_TABS = ['Attendance', 'Uploads'];
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
-
-// Latest-first: newest date on top; within a day, the later time on top.
-// Records with no parseable time sink below timed ones on the same date.
-const latestFirst = (timeKey) => (a, b) => {
-  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-  const ta = parseTimeToMinutes(a[timeKey]);
-  const tb = parseTimeToMinutes(b[timeKey]);
-  if (ta == null && tb == null) return 0;
-  if (ta == null) return 1;
-  if (tb == null) return -1;
-  return tb - ta;
-};
 
 export default function DashboardScreen() {
   const { currentUser } = useAuth();
@@ -69,9 +58,9 @@ export default function DashboardScreen() {
     [db, currentUser, from, to]
   );
 
-  const myUploads = db.uploads.filter(
-    (u) => u.facilitatorId === currentUser?.id && u.date >= from && u.date <= to
-  );
+  const myUploads = db.uploads
+    .filter((u) => u.facilitatorId === currentUser?.id && u.date >= from && u.date <= to)
+    .sort(latestFirst(null));
 
   const mySchedule = useMemo(
     () =>

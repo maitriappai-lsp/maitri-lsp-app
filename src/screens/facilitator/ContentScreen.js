@@ -5,6 +5,7 @@ import { ScrollView, Text, View, Linking, Alert } from 'react-native';
 import { useData } from '../../data/store';
 import { Screen, Card, Field, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { latestFirst } from '../../utils/sort';
 
 export default function ContentScreen() {
   const { db } = useData();
@@ -14,7 +15,7 @@ export default function ContentScreen() {
     const cat = db.categories.find((x) => x.id === c.categoryId);
     const haystack = `${c.title} ${cat?.pillar || ''} ${cat?.topic || ''}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
-  });
+  }).sort(latestFirst(null));
 
   return (
     <Screen>

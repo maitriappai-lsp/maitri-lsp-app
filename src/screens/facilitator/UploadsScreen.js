@@ -26,6 +26,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
 import { todayLocalYMD } from '../../utils/date';
+import { latestFirst } from '../../utils/sort';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 
@@ -145,8 +146,7 @@ export default function UploadsScreen() {
 
   const myUploads = db.uploads
     .filter((u) => u.facilitatorId === currentUser?.id)
-    .slice()
-    .reverse();
+    .sort(latestFirst(null));
 
   function closeAdd() {
     setShowAdd(false);

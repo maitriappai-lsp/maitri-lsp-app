@@ -28,6 +28,7 @@ import { apiPost } from '../../data/api';
 import { todayLocalYMD } from '../../utils/date';
 import { Screen, Card, SectionLabel, Select, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { latestFirst } from '../../utils/sort';
 
 // Labels the file by its extension rather than forcing everything into
 // "PDF" or "PPT" -- content published here can reasonably be any of these.
@@ -224,7 +225,7 @@ export default function ContentAdminScreen() {
           <PrimaryButton title={publishing ? 'Publishing…' : 'Publish content'} onPress={publish} disabled={!picked || publishing} />
         </AddModal>
 
-        {db.content.map((c) => {
+        {[...db.content].sort(latestFirst(null)).map((c) => {
           const cat = db.categories.find((x) => x.id === c.categoryId);
           return (
             <Card key={c.id}>

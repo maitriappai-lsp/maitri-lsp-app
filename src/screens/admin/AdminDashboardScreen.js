@@ -12,23 +12,13 @@ import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Field, Chip, RagChip, PrimaryButton, SecondaryButton, Select, DateField, TimeField, SectionLabel } from '../../components/UI';
 import { colors, spacing, ragColor } from '../../theme';
-import { todayLocalYMD, isFutureTime, parseTimeToMinutes } from '../../utils/date';
+import { todayLocalYMD, isFutureTime } from '../../utils/date';
+import { latestFirst } from '../../utils/sort';
 import { isFacilitatorRole } from '../../utils/roles';
 import { beneficiaryLabel } from '../../utils/beneficiary';
 
 const TABS = ['Overview', 'Attendance', 'Sessions', 'Uploads'];
 
-// Latest-first: newest date on top; within a day, the later time on top.
-// Records with no parseable time sink below timed ones on the same date.
-const latestFirst = (timeKey) => (a, b) => {
-  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-  const ta = timeKey ? parseTimeToMinutes(a[timeKey]) : null;
-  const tb = timeKey ? parseTimeToMinutes(b[timeKey]) : null;
-  if (ta == null && tb == null) return 0;
-  if (ta == null) return 1;
-  if (tb == null) return -1;
-  return tb - ta;
-};
 const RAG_FILTERS = ['All', 'Green', 'Amber', 'Red'];
 const RAGS = ['Green', 'Amber', 'Red'];
 

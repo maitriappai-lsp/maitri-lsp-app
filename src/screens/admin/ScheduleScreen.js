@@ -24,6 +24,7 @@ import { apiPost } from '../../data/api';
 import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField, TimeField } from '../../components/UI';
 import { colors, spacing } from '../../theme';
 import { parseTimeToMinutes, todayLocalYMD } from '../../utils/date';
+import { latestFirst } from '../../utils/sort';
 import { beneficiaryLabel } from '../../utils/beneficiary';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -520,7 +521,7 @@ export default function ScheduleScreen() {
 
         {db.schedule
           .slice()
-          .sort((a, b) => a.date.localeCompare(b.date))
+          .sort(latestFirst('time'))
           .map((s) => {
             const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
             const f = db.resources.find((x) => x.id === s.facilitatorId);

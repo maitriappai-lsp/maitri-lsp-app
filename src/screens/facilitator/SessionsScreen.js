@@ -42,6 +42,7 @@ import {
 } from '../../components/UI';
 import { colors, spacing, ragColor } from '../../theme';
 import { todayLocalYMD, parseTimeToMinutes, isFutureTime } from '../../utils/date';
+import { latestFirst } from '../../utils/sort';
 
 const RAGS = ['Green', 'Amber', 'Red'];
 
@@ -615,8 +616,7 @@ export default function SessionsScreen() {
 
   const mySessions = db.psr
     .filter((p) => p.facilitatorId === currentUser?.id)
-    .slice()
-    .reverse();
+    .sort(latestFirst('timeIn'));
 
   // Opens the popup on whichever tab has something to do.
   function openAdd() {
