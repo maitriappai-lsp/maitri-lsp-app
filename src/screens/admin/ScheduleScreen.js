@@ -6,7 +6,7 @@
 // Layout: the annual schedule list comes first, with a round "+" button at
 // the top right. Tapping "+" opens the two-step builder in a popup.
 // Row actions (edit / delete) are compact icons.
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ScrollView,
   Text,
@@ -19,11 +19,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useData } from '../../data/store';
 import { apiPost } from '../../data/api';
-import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField, TimeField } from '../../components/UI';
+import { Screen, Card, SectionLabel, Field, Select, PrimaryButton, SecondaryButton, DateField, TimeField, Chip } from '../../components/UI';
 import { colors, spacing } from '../../theme';
-import { parseTimeToMinutes, todayLocalYMD } from '../../utils/date';
+import { parseTimeToMinutes, todayLocalYMD, toLocalYMD } from '../../utils/date';
 import { upcomingThenPast } from '../../utils/sort';
 import { beneficiaryLabel } from '../../utils/beneficiary';
 
@@ -226,6 +228,148 @@ function AddModal({ visible, title, onClose, children }) {
   );
 }
 
+// ---- Grouping / table / export helpers ------------------------------------
+
+const UNKNOWN_SCHOOL = 'Unknown school';
+
+// Table-view columns. Widths are fixed so the header and every row line up,
+// and the whole table scrolls sideways when it is wider than the screen.
+const TABLE_COLUMNS = [
+  { key: 'date', label: 'Date', width: 96 },
+  { key: 'time', label: 'Time', width: 60 },
+  { key: 'class', label: 'Class', width: 90 },
+  { key: 'facilitator', label: 'Facilitator', width: 130 },
+  { key: 'assistant', label: 'Assistant', width: 130 },
+  { key: 'category', label: 'Category', width: 190 },
+  { key: 'status', label: 'Status', width: 80 },
+];
+const ACTIONS_WIDTH = 84;
+
+function classLabel(b) {
+  return b ? [b.class, b.section].filter(Boolean).join(' ') : '';
+}
+
+// Quote a value for CSV (Excel opens .csv directly).
+function csvCell(v) {
+  const t = v == null ? '' : String(v);
+  return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+// Collapsible school header: name on the left, counts on the right.
+function SchoolHeader({ school, total, upcoming, open, onToggle }) {
+  return (
+    <TouchableOpacity
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={`${school}, ${total} sessions`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.chipBg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 10,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        marginBottom: spacing.sm,
+      }}
+    >
+      <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={18} color={colors.text} />
+      <Text style={{ flex: 1, marginLeft: spacing.sm, fontWeight: '800', color: colors.text, fontSize: 15 }} numberOfLines={1}>
+        {school}
+      </Text>
+      <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+        {total} session{total === 1 ? '' : 's'}
+        {upcoming > 0 ? ` \u00b7 ${upcoming} upcoming` : ''}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+// Excel-style grid for one school's sessions: header row, one line per
+// session, thin borders, striped rows, scrolls sideways on a phone.
+function ScheduleTable({ rows, db, onEdit, onDelete }) {
+  const today = todayLocalYMD();
+  const cell = (width, children, extra) => (
+    <View
+      style={{
+        width,
+        paddingVertical: 8,
+        paddingHorizontal: 6,
+        borderRightWidth: 1,
+        borderRightColor: colors.border,
+        justifyContent: 'center',
+        ...extra,
+      }}
+    >
+      {children}
+    </View>
+  );
+  const text = (t, extra) => (
+    <Text style={{ fontSize: 12, color: colors.text, ...extra }} numberOfLines={2}>
+      {t || '\u2014'}
+    </Text>
+  );
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator nestedScrollEnabled style={{ marginBottom: spacing.md }}>
+      <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, overflow: 'hidden', backgroundColor: colors.card }}>
+        <View style={{ flexDirection: 'row', backgroundColor: colors.chipBg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          {TABLE_COLUMNS.map((c) => (
+            <React.Fragment key={c.key}>
+              {cell(c.width, text(c.label, { fontWeight: '800' }))}
+            </React.Fragment>
+          ))}
+          {cell(ACTIONS_WIDTH, text('Actions', { fontWeight: '800' }))}
+        </View>
+        {rows.map((s, i) => {
+          const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
+          const f = db.resources.find((x) => x.id === s.facilitatorId);
+          const asst = s.assistantId ? db.resources.find((x) => x.id === s.assistantId) : null;
+          const c = db.categories.find((x) => x.id === s.categoryId);
+          const locked = hasSession(db, s);
+          const upcoming = s.date >= today;
+          const status = locked ? 'Recorded' : upcoming ? 'Upcoming' : 'Past';
+          const statusColor = locked ? colors.green : upcoming ? colors.primary : colors.textMuted;
+          return (
+            <View
+              key={s.id}
+              style={{
+                flexDirection: 'row',
+                backgroundColor: i % 2 === 0 ? colors.card : colors.bg,
+                borderBottomWidth: i === rows.length - 1 ? 0 : 1,
+                borderBottomColor: colors.border,
+              }}
+            >
+              {cell(TABLE_COLUMNS[0].width, text(s.date))}
+              {cell(TABLE_COLUMNS[1].width, text(s.time))}
+              {cell(TABLE_COLUMNS[2].width, text(classLabel(b)))}
+              {cell(TABLE_COLUMNS[3].width, text(f?.name))}
+              {cell(TABLE_COLUMNS[4].width, text(asst?.name))}
+              {cell(TABLE_COLUMNS[5].width, text(c ? `${c.pillar} / ${c.topic}` : ''))}
+              {cell(TABLE_COLUMNS[6].width, text(status, { color: statusColor, fontWeight: '700' }))}
+              {cell(
+                ACTIONS_WIDTH,
+                <View style={{ flexDirection: 'row' }}>
+                  <IconButton
+                    name={locked ? 'lock-closed-outline' : 'create-outline'}
+                    color={locked ? colors.textMuted : colors.primary}
+                    label={locked ? 'Edit locked' : 'Edit'}
+                    onPress={() => onEdit(s)}
+                  />
+                  <IconButton name="trash-outline" color={colors.red} label="Delete" onPress={() => onDelete(s, b)} />
+                </View>,
+                { borderRightWidth: 0, paddingVertical: 2 }
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
 export default function ScheduleScreen() {
   const { db, addRecord, deleteRecord, updateRecord, nextIds, refresh } = useData();
 
@@ -246,6 +390,108 @@ export default function ScheduleScreen() {
   const [categoryBySession, setCategoryBySession] = useState({});
 
   const facilitators = db.resources.filter((r) => r.role === 'Facilitator');
+
+  // ---- List controls: date range, grouping by school, list/table view ----
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'table'
+  const [openSchools, setOpenSchools] = useState({}); // school name -> true when expanded
+  const [exporting, setExporting] = useState(false);
+
+  // Sessions inside the date range, grouped by school. Within each school the
+  // order is upcoming first (soonest at the top), then past sessions.
+  const groups = useMemo(() => {
+    const bySchool = new Map();
+    for (const s of db.schedule) {
+      if (fromDate && s.date < fromDate) continue;
+      if (toDate && s.date > toDate) continue;
+      const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
+      const school = b?.school || UNKNOWN_SCHOOL;
+      if (!bySchool.has(school)) bySchool.set(school, []);
+      bySchool.get(school).push(s);
+    }
+    const today = todayLocalYMD();
+    return [...bySchool.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([school, rows]) => ({
+        school,
+        rows: rows.sort(upcomingThenPast),
+        upcoming: rows.filter((r) => r.date >= today).length,
+      }));
+  }, [db.schedule, db.beneficiaries, fromDate, toDate]);
+
+  const shownCount = groups.reduce((n, g) => n + g.rows.length, 0);
+  const rangeActive = Boolean(fromDate || toDate);
+  const allOpen = groups.length > 0 && groups.every((g) => openSchools[g.school]);
+
+  function toggleSchool(school) {
+    setOpenSchools((prev) => ({ ...prev, [school]: !prev[school] }));
+  }
+  function setAllSchools(open) {
+    const next = {};
+    groups.forEach((g) => (next[g.school] = open));
+    setOpenSchools(next);
+  }
+
+  const todayYMD = todayLocalYMD();
+  const monthStart = todayYMD.slice(0, 8) + '01';
+  const now = new Date();
+  const monthEnd = toLocalYMD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+
+  function confirmDelete(s, b) {
+    Alert.alert('Delete session', `Remove ${beneficiaryLabel(b)} on ${s.date}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('schedule', s.id) },
+    ]);
+  }
+
+  // Edit from the table view: the edit form lives in the list view, so switch.
+  function editFromTable(s) {
+    startEdit(s);
+    if (!hasSession(db, s)) setViewMode('list');
+  }
+
+  // Exports exactly what is on screen (date range applied) as a .csv that
+  // opens in Excel, with names instead of internal ids.
+  async function exportCsv() {
+    if (shownCount === 0) {
+      Alert.alert('Nothing to export', 'No sessions match the current date range.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const header = ['School', 'Class', 'Section', 'Date', 'Time', 'Facilitator', 'Assistant', 'Pillar', 'Topic', 'Status'];
+      const lines = [header.map(csvCell).join(',')];
+      const today = todayLocalYMD();
+      for (const g of groups) {
+        for (const s of g.rows) {
+          const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
+          const f = db.resources.find((x) => x.id === s.facilitatorId);
+          const asst = s.assistantId ? db.resources.find((x) => x.id === s.assistantId) : null;
+          const c = db.categories.find((x) => x.id === s.categoryId);
+          const status = hasSession(db, s) ? 'Recorded' : s.date >= today ? 'Upcoming' : 'Past';
+          lines.push(
+            [g.school, b?.class, b?.section, s.date, s.time, f?.name, asst?.name, c?.pillar, c?.topic, status]
+              .map(csvCell)
+              .join(',')
+          );
+        }
+      }
+      const name = `schedule-${fromDate || 'start'}-to-${toDate || 'end'}.csv`;
+      const uri = FileSystem.documentDirectory + name;
+      // BOM so Excel reads non-English names correctly.
+      await FileSystem.writeAsStringAsync(uri, '\uFEFF' + lines.join('\r\n'), { encoding: FileSystem.EncodingType.UTF8 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: name, UTI: 'public.comma-separated-values-text' });
+      } else {
+        Alert.alert('Export ready', `Saved to ${uri}`);
+      }
+    } catch (e) {
+      Alert.alert('Export failed', e.message || 'Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Closes the popup and returns the builder to step 1 for next time.
   function closeAdd() {
@@ -433,96 +679,7 @@ export default function ScheduleScreen() {
     }
   }
 
-  return (
-    <Screen>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.md }}>
-          Schedule
-        </Text>
-
-        <ListHeader
-          title="Annual schedule"
-          count={db.schedule.length}
-          onAdd={() => setShowAdd(true)}
-          addLabel="Add sessions"
-        />
-
-        <AddModal
-          visible={showAdd}
-          title={step === 1 ? 'Add sessions (step 1 of 2)' : 'Add sessions (step 2 of 2)'}
-          onClose={closeAdd}
-        >
-          {step === 1 && (
-            <View>
-              <SectionLabel>Step 1 -- define the recurrence</SectionLabel>
-              <SectionLabel>Beneficiary</SectionLabel>
-              <Select
-                value={beneficiaryId}
-                onSelect={setBeneficiaryId}
-                options={db.beneficiaries.map((b) => ({
-                  value: b.id,
-                  label: `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}`,
-                }))}
-              />
-              <SectionLabel>Facilitator</SectionLabel>
-              <Select
-                value={facilitatorId}
-                onSelect={(v) => {
-                  setFacilitatorId(v);
-                  if (v === assistantId) setAssistantId(NO_ASSISTANT);
-                }}
-                options={facilitators.map((f) => ({ value: f.id, label: f.name }))}
-              />
-              <SectionLabel>Assistant (optional)</SectionLabel>
-              <Select
-                value={assistantId}
-                onSelect={setAssistantId}
-                options={assistantOptions(facilitators, facilitatorId)}
-              />
-              <SectionLabel>Frequency</SectionLabel>
-              <Select
-                value={frequency}
-                onSelect={setFrequency}
-                options={FREQUENCIES.map((f) => ({ value: f, label: f === 'Monthly' ? 'Monthly (every 4 weeks)' : f }))}
-              />
-              <SectionLabel>Day of week</SectionLabel>
-              <Select value={dayOfWeek} onSelect={setDayOfWeek} options={DAYS.map((d) => ({ value: d, label: d }))} />
-              <View style={{ flexDirection: 'row', gap: spacing.md }}>
-                <View style={{ flex: 1 }}>
-                  <DateField label="Start date" value={startDate} onChange={setStartDate} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <DateField label="End date" value={endDate} onChange={setEndDate} />
-                </View>
-              </View>
-              <TimeField label="Time" value={time} onChange={setTime} />
-              <PrimaryButton title="Generate dates" onPress={handleGenerate} />
-            </View>
-          )}
-
-          {step === 2 && (
-            <View>
-              <SectionLabel>Step 2 -- assign category per session ({generatedDates.length} dates)</SectionLabel>
-              {generatedDates.map((date) => (
-                <View key={date} style={{ marginBottom: spacing.md }}>
-                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>{date}</Text>
-                  <Select
-                    value={categoryBySession[date]}
-                    onSelect={(v) => setCategoryBySession((prev) => ({ ...prev, [date]: v }))}
-                    options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
-                  />
-                </View>
-              ))}
-              <PrimaryButton title="Confirm & save all" onPress={confirmAndSaveAll} />
-              <SecondaryButton title="Back" onPress={() => setStep(1)} style={{ marginTop: spacing.sm }} />
-            </View>
-          )}
-        </AddModal>
-
-        {db.schedule
-          .slice()
-          .sort(upcomingThenPast)
-          .map((s) => {
+  function renderSession(s) {
             const b = db.beneficiaries.find((x) => x.id === s.beneficiaryId);
             const f = db.resources.find((x) => x.id === s.facilitatorId);
             const asst = s.assistantId ? db.resources.find((x) => x.id === s.assistantId) : null;
@@ -614,18 +771,170 @@ export default function ScheduleScreen() {
                       name="trash-outline"
                       color={colors.red}
                       label="Delete"
-                      onPress={() =>
-                        Alert.alert('Delete session', `Remove ${beneficiaryLabel(b)} on ${s.date}?`, [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('schedule', s.id) },
-                        ])
-                      }
+                      onPress={() => confirmDelete(s, b)}
                     />
                   </View>
                 </View>
               </Card>
             );
-          })}
+  }
+
+  return (
+    <Screen>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: spacing.md }}>
+          Schedule
+        </Text>
+
+        <ListHeader
+          title="Annual schedule"
+          count={db.schedule.length}
+          onAdd={() => setShowAdd(true)}
+          addLabel="Add sessions"
+        />
+
+        <AddModal
+          visible={showAdd}
+          title={step === 1 ? 'Add sessions (step 1 of 2)' : 'Add sessions (step 2 of 2)'}
+          onClose={closeAdd}
+        >
+          {step === 1 && (
+            <View>
+              <SectionLabel>Step 1 -- define the recurrence</SectionLabel>
+              <SectionLabel>Beneficiary</SectionLabel>
+              <Select
+                value={beneficiaryId}
+                onSelect={setBeneficiaryId}
+                options={db.beneficiaries.map((b) => ({
+                  value: b.id,
+                  label: `${b.school} - ${b.class}${b.section ? ' ' + b.section : ''}`,
+                }))}
+              />
+              <SectionLabel>Facilitator</SectionLabel>
+              <Select
+                value={facilitatorId}
+                onSelect={(v) => {
+                  setFacilitatorId(v);
+                  if (v === assistantId) setAssistantId(NO_ASSISTANT);
+                }}
+                options={facilitators.map((f) => ({ value: f.id, label: f.name }))}
+              />
+              <SectionLabel>Assistant (optional)</SectionLabel>
+              <Select
+                value={assistantId}
+                onSelect={setAssistantId}
+                options={assistantOptions(facilitators, facilitatorId)}
+              />
+              <SectionLabel>Frequency</SectionLabel>
+              <Select
+                value={frequency}
+                onSelect={setFrequency}
+                options={FREQUENCIES.map((f) => ({ value: f, label: f === 'Monthly' ? 'Monthly (every 4 weeks)' : f }))}
+              />
+              <SectionLabel>Day of week</SectionLabel>
+              <Select value={dayOfWeek} onSelect={setDayOfWeek} options={DAYS.map((d) => ({ value: d, label: d }))} />
+              <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                <View style={{ flex: 1 }}>
+                  <DateField label="Start date" value={startDate} onChange={setStartDate} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <DateField label="End date" value={endDate} onChange={setEndDate} />
+                </View>
+              </View>
+              <TimeField label="Time" value={time} onChange={setTime} />
+              <PrimaryButton title="Generate dates" onPress={handleGenerate} />
+            </View>
+          )}
+
+          {step === 2 && (
+            <View>
+              <SectionLabel>Step 2 -- assign category per session ({generatedDates.length} dates)</SectionLabel>
+              {generatedDates.map((date) => (
+                <View key={date} style={{ marginBottom: spacing.md }}>
+                  <Text style={{ fontWeight: '700', color: colors.text, marginBottom: 4 }}>{date}</Text>
+                  <Select
+                    value={categoryBySession[date]}
+                    onSelect={(v) => setCategoryBySession((prev) => ({ ...prev, [date]: v }))}
+                    options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
+                  />
+                </View>
+              ))}
+              <PrimaryButton title="Confirm & save all" onPress={confirmAndSaveAll} />
+              <SecondaryButton title="Back" onPress={() => setStep(1)} style={{ marginTop: spacing.sm }} />
+            </View>
+          )}
+        </AddModal>
+
+        {/* ---- Date range + view controls ---- */}
+        <Card>
+          <SectionLabel>Filter by date</SectionLabel>
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <View style={{ flex: 1 }}>
+              <DateField label="From" value={fromDate} onChange={setFromDate} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <DateField label="To" value={toDate} onChange={setToDate} />
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+            <Chip label="Upcoming" active={fromDate === todayYMD && !toDate} onPress={() => { setFromDate(todayYMD); setToDate(''); }} />
+            <Chip label="This month" active={fromDate === monthStart && toDate === monthEnd} onPress={() => { setFromDate(monthStart); setToDate(monthEnd); }} />
+            <Chip label="Clear" active={false} onPress={() => { setFromDate(''); setToDate(''); }} />
+          </View>
+          {fromDate && toDate && fromDate > toDate ? (
+            <Text style={{ color: colors.red, fontSize: 12, marginTop: spacing.sm }}>
+              "From" is after "To", so no sessions can match.
+            </Text>
+          ) : null}
+        </Card>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, gap: spacing.xs }}>
+          <Chip label="List" active={viewMode === 'list'} onPress={() => setViewMode('list')} />
+          <Chip label="Table" active={viewMode === 'table'} onPress={() => setViewMode('table')} />
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => setAllSchools(!allOpen)} disabled={groups.length === 0}>
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>
+              {allOpen ? 'Collapse all' : 'Expand all'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
+          Showing {shownCount} of {db.schedule.length} session(s) across {groups.length} school(s)
+          {rangeActive ? ' in the selected dates' : ''}
+        </Text>
+        <SecondaryButton
+          title={exporting ? 'Preparing...' : 'Export shown sessions (Excel / CSV)'}
+          onPress={exportCsv}
+          disabled={exporting}
+          style={{ marginBottom: spacing.md }}
+        />
+
+        {groups.length === 0 && (
+          <Text style={{ color: colors.textMuted, padding: spacing.md }}>
+            {db.schedule.length === 0 ? 'No sessions scheduled yet.' : 'No sessions in the selected dates.'}
+          </Text>
+        )}
+
+        {groups.map((g) => {
+          const open = Boolean(openSchools[g.school]);
+          return (
+            <View key={g.school}>
+              <SchoolHeader
+                school={g.school}
+                total={g.rows.length}
+                upcoming={g.upcoming}
+                open={open}
+                onToggle={() => toggleSchool(g.school)}
+              />
+              {open &&
+                (viewMode === 'table' ? (
+                  <ScheduleTable rows={g.rows} db={db} onEdit={editFromTable} onDelete={confirmDelete} />
+                ) : (
+                  g.rows.map((s) => renderSession(s))
+                ))}
+            </View>
+          );
+        })}
 
         <Card>
           <SectionLabel>Import from Excel</SectionLabel>

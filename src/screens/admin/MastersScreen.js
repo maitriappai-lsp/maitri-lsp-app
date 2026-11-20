@@ -6,7 +6,7 @@
 // Layout: each tab shows its list of records first, with a round "+" button
 // at the top right. Tapping "+" opens the Add form in a bottom-sheet popup.
 // Row actions (edit / reset password / deactivate / delete) are compact icons.
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ScrollView,
   Text,
@@ -726,6 +726,46 @@ function CategoriesTab() {
   const [editSubtopic, setEditSubtopic] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Pillar-wise grouping: pillar name -> true when expanded (collapsed by default).
+  const [openPillars, setOpenPillars] = useState({});
+
+  // Known pillars in their standard order first, then any other pillar names
+  // found in the data (e.g. from an Excel import) alphabetically. Within a
+  // pillar: by topic, then sub-topic. Pillars with no records are left out.
+  const pillarGroups = useMemo(() => {
+    const byPillar = new Map();
+    for (const c of db.categories) {
+      const name = c.pillar || 'Others';
+      if (!byPillar.has(name)) byPillar.set(name, []);
+      byPillar.get(name).push(c);
+    }
+    const rank = (name) => {
+      const i = PILLARS.indexOf(name);
+      return i === -1 ? PILLARS.length : i;
+    };
+    return [...byPillar.entries()]
+      .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+      .map(([name, rows]) => ({
+        name,
+        rows: rows.sort(
+          (x, y) =>
+            String(x.topic || '').localeCompare(String(y.topic || '')) ||
+            String(x.subtopic || '').localeCompare(String(y.subtopic || ''))
+        ),
+      }));
+  }, [db.categories]);
+
+  const allPillarsOpen = pillarGroups.length > 0 && pillarGroups.every((g) => openPillars[g.name]);
+
+  function togglePillar(name) {
+    setOpenPillars((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
+  function setAllPillars(open) {
+    const next = {};
+    pillarGroups.forEach((g) => (next[g.name] = open));
+    setOpenPillars(next);
+  }
+
   async function add() {
     setSaving(true);
     try {
@@ -735,6 +775,7 @@ function CategoriesTab() {
         topic,
         subtopic,
       });
+      setOpenPillars((prev) => ({ ...prev, [pillar]: true }));
       Alert.alert('Saved', 'Life skill category added.', [{ text: 'OK', onPress: () => setShowAdd(false) }]);
       setTopic('OTHERS');
       setSubtopic('OTHERS');
@@ -760,6 +801,7 @@ function CategoriesTab() {
     setSavingEdit(true);
     try {
       await updateRecord('categories', editingId, { pillar: editPillar, topic: editTopic, subtopic: editSubtopic });
+      setOpenPillars((prev) => ({ ...prev, [editPillar]: true }));
       Alert.alert('Saved', 'Life skill category updated.');
       setEditingId(null);
     } catch (e) {
@@ -786,50 +828,95 @@ function CategoriesTab() {
         <PrimaryButton title={saving ? 'Saving...' : 'Add Life Skill'} onPress={add} disabled={saving} />
       </AddModal>
 
-      {[...db.categories].sort(newestFirstById).map((c) =>
-        editingId === c.id ? (
-          <Card key={c.id}>
-            <SectionLabel>Edit category</SectionLabel>
-            <SectionLabel>Pillar</SectionLabel>
-            <Select value={editPillar} onSelect={setEditPillar} options={PILLARS.map((p) => ({ value: p, label: p }))} />
-            <Field label="Topic (Category 2)" value={editTopic} onChangeText={setEditTopic} />
-            <Field label="Sub-topic (Category 3, optional)" value={editSubtopic} onChangeText={setEditSubtopic} />
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <PrimaryButton title={savingEdit ? 'Saving...' : 'Save'} onPress={saveEdit} disabled={savingEdit} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <SecondaryButton title="Cancel" onPress={cancelEdit} />
-              </View>
-            </View>
-          </Card>
-        ) : (
-          <Card key={c.id}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View style={{ flex: 1, marginRight: spacing.sm }}>
-                <Text style={{ fontWeight: '700', color: colors.text }}>{c.pillar}</Text>
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                  {c.id} - {c.topic} / {c.subtopic}
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(c)} />
-                <IconButton
-                  name="trash-outline"
-                  color={colors.red}
-                  label="Delete"
-                  onPress={() =>
-                    Alert.alert('Delete category', `Remove ${c.pillar}?`, [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('categories', c.id) },
-                    ])
-                  }
-                />
-              </View>
-            </View>
-          </Card>
-        )
+      {pillarGroups.length > 0 && (
+        <View style={{ alignItems: 'flex-end', marginBottom: spacing.sm }}>
+          <TouchableOpacity onPress={() => setAllPillars(!allPillarsOpen)}>
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>
+              {allPillarsOpen ? 'Collapse all' : 'Expand all'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
+
+      {pillarGroups.map((g) => {
+        const open = Boolean(openPillars[g.name]);
+        return (
+          <View key={g.name}>
+            <TouchableOpacity
+              onPress={() => togglePillar(g.name)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: open }}
+              accessibilityLabel={`${g.name}, ${g.rows.length} life skills`}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: colors.chipBg,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 10,
+                paddingVertical: spacing.md,
+                paddingHorizontal: spacing.md,
+                marginBottom: spacing.sm,
+              }}
+            >
+              <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={18} color={colors.text} />
+              <Text style={{ flex: 1, marginLeft: spacing.sm, fontWeight: '800', color: colors.text, fontSize: 15 }} numberOfLines={1}>
+                {g.name}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                {g.rows.length} topic{g.rows.length === 1 ? '' : 's'}
+              </Text>
+            </TouchableOpacity>
+
+            {open &&
+              g.rows.map((c) =>
+                editingId === c.id ? (
+                  <Card key={c.id}>
+                    <SectionLabel>Edit category</SectionLabel>
+                    <SectionLabel>Pillar</SectionLabel>
+                    <Select value={editPillar} onSelect={setEditPillar} options={PILLARS.map((p) => ({ value: p, label: p }))} />
+                    <Field label="Topic (Category 2)" value={editTopic} onChangeText={setEditTopic} />
+                    <Field label="Sub-topic (Category 3, optional)" value={editSubtopic} onChangeText={setEditSubtopic} />
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <View style={{ flex: 1 }}>
+                        <PrimaryButton title={savingEdit ? 'Saving...' : 'Save'} onPress={saveEdit} disabled={savingEdit} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <SecondaryButton title="Cancel" onPress={cancelEdit} />
+                      </View>
+                    </View>
+                  </Card>
+                ) : (
+                  <Card key={c.id}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <View style={{ flex: 1, marginRight: spacing.sm }}>
+                        <Text style={{ fontWeight: '700', color: colors.text }}>
+                          {c.topic}
+                          {c.subtopic ? ` / ${c.subtopic}` : ''}
+                        </Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 12 }}>{c.id}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                        <IconButton name="create-outline" color={colors.primary} label="Edit" onPress={() => startEdit(c)} />
+                        <IconButton
+                          name="trash-outline"
+                          color={colors.red}
+                          label="Delete"
+                          onPress={() =>
+                            Alert.alert('Delete category', `Remove ${c.pillar} / ${c.topic}?`, [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Delete', style: 'destructive', onPress: () => deleteRecord('categories', c.id) },
+                            ])
+                          }
+                        />
+                      </View>
+                    </View>
+                  </Card>
+                )
+              )}
+          </View>
+        );
+      })}
       <ImportFromExcel label="categories" table="categories" columnsHint="Pillar, Topic, Subtopic" />
     </ScrollView>
   );

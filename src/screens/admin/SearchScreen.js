@@ -32,6 +32,7 @@ import { useData } from '../../data/store';
 import { apiGet } from '../../data/api';
 import { Screen, Card, Chip, Field, DateField, PrimaryButton, SecondaryButton } from '../../components/UI';
 import { colors, spacing } from '../../theme';
+import { latestFirst, newestFirstById, upcomingThenPast } from '../../utils/sort';
 
 // ---- Small shared label resolvers (FK id -> readable text) -----------------
 
@@ -91,6 +92,7 @@ function renderDetailValue(key, value, db) {
 // date-range controls for that tab entirely.
 // searchText: every value worth matching against, including resolved FK
 // labels (so e.g. a facilitator's name finds their attendance rows).
+// sort: list order (newest first; the Schedule tab lists upcoming soonest first).
 // summary: the one-line list-row text.
 
 const TABLE_CONFIGS = [
@@ -98,6 +100,7 @@ const TABLE_CONFIGS = [
     key: 'geo',
     dbKey: 'geo',
     label: 'Geo',
+    sort: newestFirstById,
     dateField: null,
     searchText: (r) => [r.school, r.label, r.radiusMeters, r.lat, r.lng].filter(Boolean).join(' '),
     summary: (r) => `${r.school}${r.label ? ' - ' + r.label : ''} \u00b7 ${r.radiusMeters}m radius`,
@@ -106,6 +109,7 @@ const TABLE_CONFIGS = [
     key: 'attendance',
     dbKey: 'attendance',
     label: 'Attendance',
+    sort: latestFirst('timeIn'),
     dateField: 'date',
     searchText: (r, db) =>
       [beneficiaryLabel(db, r.beneficiaryId), resourceName(db, r.facilitatorId), r.date, r.timeIn, r.timeOut, r.overrideReason]
@@ -118,6 +122,7 @@ const TABLE_CONFIGS = [
     key: 'schedule',
     dbKey: 'schedule',
     label: 'Schedule',
+    sort: upcomingThenPast,
     dateField: 'date',
     searchText: (r, db) =>
       [
@@ -136,6 +141,7 @@ const TABLE_CONFIGS = [
     key: 'psr',
     dbKey: 'psr',
     label: 'Sessions',
+    sort: latestFirst('timeIn'),
     dateField: 'date',
     searchText: (r, db) =>
       [
@@ -161,6 +167,7 @@ const TABLE_CONFIGS = [
     key: 'resources',
     dbKey: 'resources',
     label: 'Resources',
+    sort: newestFirstById,
     dateField: 'contractStart',
     searchText: (r) => [r.name, r.phone, r.email, r.address, r.type, r.role, r.bloodGroup, r.emergencyContact].filter(Boolean).join(' '),
     summary: (r) => `${r.name} \u00b7 ${r.role || '--'} \u00b7 ${r.phone || '--'}${r.active === false ? ' \u00b7 Inactive' : ''}`,
@@ -169,6 +176,7 @@ const TABLE_CONFIGS = [
     key: 'beneficiaries',
     dbKey: 'beneficiaries',
     label: 'Beneficiaries',
+    sort: newestFirstById,
     dateField: null,
     searchText: (r, db) => [r.school, r.class, r.section, geoLabel(db, r.geoId)].filter(Boolean).join(' '),
     summary: (r) => `${r.school}${r.class ? ' \u00b7 ' + r.class : ''}${r.section ? ' ' + r.section : ''}`,
@@ -177,6 +185,7 @@ const TABLE_CONFIGS = [
     key: 'categories',
     dbKey: 'categories',
     label: 'Life Skills',
+    sort: newestFirstById,
     dateField: null,
     searchText: (r) => [r.pillar, r.topic, r.subtopic].filter(Boolean).join(' '),
     summary: (r) => `${r.pillar}${r.topic ? ' / ' + r.topic : ''}${r.subtopic && r.subtopic !== 'OTHERS' ? ' / ' + r.subtopic : ''}`,
@@ -185,6 +194,7 @@ const TABLE_CONFIGS = [
     key: 'uploads',
     dbKey: 'uploads',
     label: 'Uploads',
+    sort: latestFirst(null),
     dateField: 'date',
     searchText: (r, db) =>
       [r.fileName, r.description, beneficiaryLabel(db, r.beneficiaryId), resourceName(db, r.facilitatorId), categoryLabel(db, r.categoryId), r.date]
@@ -196,9 +206,17 @@ const TABLE_CONFIGS = [
     key: 'content',
     dbKey: 'content',
     label: 'Content',
+    sort: latestFirst(null),
     dateField: 'date',
-    searchText: (r, db) => [r.title, r.fileType, categoryLabel(db, r.categoryId), resourceName(db, r.uploadedBy), r.date].filter(Boolean).join(' '),
-    summary: (r, db) => `${r.title} \u00b7 ${r.fileType || '--'} \u00b7 ${r.date}`,
+    searchText: (r, db) =>
+      [r.title, r.fileType, r.gradeLevel, categoryLabel(db, r.categoryId), resourceName(db, r.uploadedBy), r.date]
+        .filter(Boolean)
+        .join(' '),
+    // Searching exactly "primary" or "middle" means "content marked for that
+    // level", not "files with that word in the name". Anything else falls
+    // back to the normal text search (which also includes the level).
+    matchQuery: (r, q) => (q === 'primary' || q === 'middle' ? (r.gradeLevel || '').toLowerCase() === q : undefined),
+    summary: (r, db) => `${r.title} \u00b7 ${r.fileType || '--'}${r.gradeLevel ? ' \u00b7 ' + r.gradeLevel : ''} \u00b7 ${r.date}`,
   },
 ];
 
@@ -238,12 +256,12 @@ export default function SearchScreen() {
     }
     const q = query.trim().toLowerCase();
     if (q) {
-      rows = rows.filter((r) => config.searchText(r, db).toLowerCase().includes(q));
+      rows = rows.filter((r) => {
+        const decided = config.matchQuery ? config.matchQuery(r, q) : undefined;
+        return decided !== undefined ? decided : config.searchText(r, db).toLowerCase().includes(q);
+      });
     }
-    if (config.dateField) {
-      rows = rows.slice().sort((a, b) => (b[config.dateField] || '').localeCompare(a[config.dateField] || ''));
-    }
-    return rows;
+    return rows.slice().sort(config.sort);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allRows, query, fromDate, toDate, config]);
 

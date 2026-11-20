@@ -44,6 +44,38 @@ function detectFileType(fileName) {
   return 'Other';
 }
 
+const GRADE_LEVELS = ['Primary', 'Middle'];
+
+// Small pill showing which level a piece of content is for. Tapping it lets
+// the admin change it (also how content uploaded before this column existed
+// gets a level). Not-yet-set content shows an amber "Set level".
+function LevelBadge({ level, onPress }) {
+  const set = Boolean(level);
+  const color = !set ? colors.amber : level === 'Primary' ? colors.green : colors.primary;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={set ? `Level ${level}. Tap to change` : 'Level not set. Tap to set'}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      style={{
+        alignSelf: 'flex-start',
+        marginTop: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: color,
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+      }}
+    >
+      <Text style={{ color, fontSize: 12, fontWeight: '700' }}>{set ? level : 'Set level'}</Text>
+      <Text style={{ color, fontSize: 10, marginLeft: 4 }}>{'\u25BE'}</Text>
+    </TouchableOpacity>
+  );
+}
+
 // Round "+" button shown at the top-right of the list.
 function AddButton({ onPress, label }) {
   return (
@@ -149,8 +181,9 @@ function AddModal({ visible, title, onClose, children }) {
 
 export default function ContentAdminScreen() {
   const { currentUser } = useAuth();
-  const { db, addRecord, deleteRecord, nextId } = useData();
+  const { db, addRecord, updateRecord, deleteRecord, nextId } = useData();
   const [categoryId, setCategoryId] = useState(db.categories[0]?.id);
+  const [gradeLevel, setGradeLevel] = useState(GRADE_LEVELS[0]);
   const [picked, setPicked] = useState(null);
   const [publishing, setPublishing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -182,6 +215,7 @@ export default function ContentAdminScreen() {
         id: nextId('CNT', 'content'),
         title: picked.name,
         categoryId,
+        gradeLevel,
         fileType: detectFileType(picked.name),
         uploadedBy: currentUser?.id,
         date: todayLocalYMD(),
@@ -194,6 +228,21 @@ export default function ContentAdminScreen() {
     } finally {
       setPublishing(false);
     }
+  }
+
+  function chooseLevel(c) {
+    const setTo = (level) => async () => {
+      if (level === c.gradeLevel) return;
+      try {
+        await updateRecord('content', c.id, { gradeLevel: level });
+      } catch (e) {
+        Alert.alert('Could not save', e.message || 'Please try again.');
+      }
+    };
+    Alert.alert('Content level', `Who is "${c.title}" for?`, [
+      ...GRADE_LEVELS.map((level) => ({ text: level, onPress: setTo(level) })),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   return (
@@ -217,6 +266,12 @@ export default function ContentAdminScreen() {
             onSelect={setCategoryId}
             options={db.categories.map((c) => ({ value: c.id, label: `${c.pillar} / ${c.topic}` }))}
           />
+          <SectionLabel>Level</SectionLabel>
+          <Select
+            value={gradeLevel}
+            onSelect={setGradeLevel}
+            options={GRADE_LEVELS.map((g) => ({ value: g, label: g }))}
+          />
           <SecondaryButton
             title={picked ? `Selected: ${picked.name}` : 'Choose a file (any type)'}
             onPress={pickFile}
@@ -235,6 +290,7 @@ export default function ContentAdminScreen() {
                   <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                     {cat?.pillar} - {c.fileType} - {c.date}
                   </Text>
+                  <LevelBadge level={c.gradeLevel} onPress={() => chooseLevel(c)} />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   {c.fileUrl && (
